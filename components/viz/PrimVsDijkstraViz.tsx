@@ -26,7 +26,7 @@ import {
   MST_EDGE_BY_ID,
   edgeId,
   other,
-  trimmedEdge,
+  routeMstEdge,
   mstAdjacency,
 } from './mst-graph'
 
@@ -197,7 +197,7 @@ function Panel({
           {MST_EDGES.map((e) => {
             const A = MST_POS.get(e.a)!
             const B = MST_POS.get(e.b)!
-            const g = trimmedEdge(A, B)
+            const g = routeMstEdge(A, B)
             const isTree = treeEdges.has(e.id)
             const isAdded = e.id === step.edgeAdded
             let stroke = '#d4cccd'
@@ -208,15 +208,25 @@ function Panel({
             }
             return (
               <g key={e.id}>
-                <line
-                  x1={g.x1}
-                  y1={g.y1}
-                  x2={g.x2}
-                  y2={g.y2}
-                  stroke={stroke}
-                  strokeWidth={width}
-                  strokeLinecap="round"
-                />
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={width}
+                    strokeLinecap="round"
+                  />
+                ) : (
+                  <path
+                    d={g.d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={width}
+                    strokeLinecap="round"
+                  />
+                )}
                 <rect
                   x={g.mx - 10}
                   y={g.my - 9}

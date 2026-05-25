@@ -11,9 +11,10 @@
  * both views at once. Built for L10.
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 type HeapStep = {
   array: number[]
@@ -119,6 +120,8 @@ function nodePos(i: number) {
   }
 }
 
+const NODE_R = 19
+
 export function BinaryHeapAnimator() {
   const [mode, setMode] = useState<'insert' | 'extract'>('insert')
   const [step, setStep] = useState(0)
@@ -127,6 +130,32 @@ export function BinaryHeapAnimator() {
   const last = steps.length - 1
   const cur = steps[step]
   const n = cur.array.length
+
+  const { rects: nodeRects, rectById: nodeRectById } = useMemo(() => {
+    const rects: NodeRect[] = []
+    const byId = new Map<number, NodeRect>()
+    for (let i = 0; i < n; i++) {
+      const p = nodePos(i)
+      const r: NodeRect = {
+        id: i,
+        x: p.x - NODE_R,
+        y: p.y - NODE_R,
+        w: 2 * NODE_R,
+        h: 2 * NODE_R,
+      }
+      rects.push(r)
+      byId.set(i, r)
+    }
+    return { rects, rectById: byId }
+  }, [n])
+
+  /** Routed parent→child edge geometry, center-to-center (heap tree edges
+   *  have no arrowhead, so no asymmetric trim). */
+  const routedEdge = (parentI: number, childI: number) => {
+    const pR = nodeRectById.get(parentI)!
+    const cR = nodeRectById.get(childI)!
+    return routeEdge(pR, cR, nodeRects)
+  }
 
   return (
     <section className="my-6 rounded-xl border border-border bg-bg-elevated p-4 shadow-sm">
@@ -165,16 +194,23 @@ export function BinaryHeapAnimator() {
           {/* tree edges */}
           {cur.array.map((_, i) => {
             const kids = [2 * i + 1, 2 * i + 2].filter((k) => k < n)
-            const p = nodePos(i)
             return kids.map((k) => {
-              const c = nodePos(k)
-              return (
+              const g = routedEdge(i, k)
+              return g.kind === 'line' ? (
                 <line
                   key={`e${i}-${k}`}
-                  x1={p.x}
-                  y1={p.y}
-                  x2={c.x}
-                  y2={c.y}
+                  x1={g.x1}
+                  y1={g.y1}
+                  x2={g.x2}
+                  y2={g.y2}
+                  stroke="#9b8a8d"
+                  strokeWidth={1.8}
+                />
+              ) : (
+                <path
+                  key={`e${i}-${k}`}
+                  d={g.d}
+                  fill="none"
                   stroke="#9b8a8d"
                   strokeWidth={1.8}
                 />

@@ -19,6 +19,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Play, Pause, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 const RED = '#ef4444'
 const BLUE = '#3b82f6'
@@ -26,6 +27,7 @@ const GRAY = '#a8a29e'
 
 const MIN_K = 3
 const MAX_K = 8
+const NODE_R = 22
 
 function ringPositions(k: number, cx = 200, cy = 190, r = 140) {
   const out: { x: number; y: number }[] = []
@@ -46,6 +48,17 @@ export function OddCycleColoring() {
   const [playing, setPlaying] = useState(false)
 
   const positions = useMemo(() => ringPositions(k), [k])
+  const nodeRects = useMemo<NodeRect[]>(
+    () =>
+      positions.map((p, i) => ({
+        id: i,
+        x: p.x - NODE_R,
+        y: p.y - NODE_R,
+        w: NODE_R * 2,
+        h: NODE_R * 2,
+      })),
+    [positions],
+  )
   const lastStep = k + 1 // 0=none, 1..k=color v0..v_{k-1}, k+1=evaluate closing edge
 
   useEffect(() => {
@@ -165,24 +178,44 @@ export function OddCycleColoring() {
             {edges.map((e, idx) => {
               const A = positions[e[0]]
               const B = positions[e[1]]
+              // Collision-aware routing: chord of a regular polygon, so any
+              // other vertex on the circle stays clear of every interior
+              // chord — steady-state is a straight line. Locks out the
+              // «edge through unrelated node» class of bug structurally
+              // per Phase E.4.6.
+              const g = routeEdge(nodeRects[e[0]], nodeRects[e[1]], nodeRects)
               const ep = edgeProps(idx)
               const isClosing = idx === closingIdx
+              const dash = isClosing && step < lastStep ? '4 4' : undefined
+              const mx = g.kind === 'curve' ? (A.x + 2 * g.cx + B.x) / 4 : (A.x + B.x) / 2
+              const my = g.kind === 'curve' ? (A.y + 2 * g.cy + B.y) / 4 : (A.y + B.y) / 2
               return (
                 <g key={`e${idx}`}>
-                  <line
-                    x1={A.x}
-                    y1={A.y}
-                    x2={B.x}
-                    y2={B.y}
-                    stroke={ep.stroke}
-                    strokeWidth={ep.width}
-                    strokeLinecap="round"
-                    strokeDasharray={isClosing && step < lastStep ? '4 4' : undefined}
-                  />
+                  {g.kind === 'line' ? (
+                    <line
+                      x1={g.x1}
+                      y1={g.y1}
+                      x2={g.x2}
+                      y2={g.y2}
+                      stroke={ep.stroke}
+                      strokeWidth={ep.width}
+                      strokeLinecap="round"
+                      strokeDasharray={dash}
+                    />
+                  ) : (
+                    <path
+                      d={g.d}
+                      fill="none"
+                      stroke={ep.stroke}
+                      strokeWidth={ep.width}
+                      strokeLinecap="round"
+                      strokeDasharray={dash}
+                    />
+                  )}
                   {isClosing && atEnd && (
                     <text
-                      x={(A.x + B.x) / 2}
-                      y={(A.y + B.y) / 2 - 8}
+                      x={mx}
+                      y={my - 8}
                       textAnchor="middle"
                       fontSize={12}
                       fontWeight={800}

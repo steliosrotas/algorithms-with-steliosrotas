@@ -13,6 +13,7 @@
 
 import { useState } from 'react'
 import { RotateCcw, RefreshCw } from 'lucide-react'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type NNode = { id: string; x: number; y: number }
 const S: NNode = { id: 's', x: 56, y: 150 }
@@ -20,7 +21,16 @@ const NA: NNode = { id: 'a', x: 190, y: 74 }
 const NB: NNode = { id: 'b', x: 190, y: 224 }
 const NC: NNode = { id: 'c', x: 322, y: 150 }
 const NT: NNode = { id: 't', x: 452, y: 150 }
+const ALL_NODES: ReadonlyArray<NNode> = [S, NA, NB, NC, NT]
 const R = 24
+const NODE_RECTS: ReadonlyArray<NodeRect> = ALL_NODES.map((n) => ({
+  id: n.id,
+  x: n.x - R,
+  y: n.y - R,
+  w: R * 2,
+  h: R * 2,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r] as const))
 
 const BASE_COST = 4 // s→a→b→c→t with zero extra laps
 const PER_LAP = -3 // one lap of a→b→c→a: 2 + 1 + (−6)
@@ -28,16 +38,28 @@ const MAX_LAPS = 8
 
 const costAt = (laps: number) => BASE_COST + PER_LAP * laps
 
-function trim(a: NNode, b: NNode, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
+/**
+ * Collision-aware edge routing: returns a straight segment trimmed to the
+ * node borders (the steady-state case for this 5-node directed layout) or a
+ * quadratic Bezier that bends around an unrelated node, also trimmed so the
+ * arrowhead lands on the target border. The `mx, my` fields anchor the weight
+ * label at the centerline midpoint for lines and at the Bezier midpoint
+ * `(P0 + 2Q + P2) / 4` for curves. Locks out the «edge through unrelated
+ * node» class of bug structurally per Phase E.4.6.
+ */
+function routedEdge(a: NNode, b: NNode) {
+  const rectA = NODE_RECT_BY_ID.get(a.id)!
+  const rectB = NODE_RECT_BY_ID.get(b.id)!
+  const geom = routeEdge(rectA, rectB, NODE_RECTS)
+  const trimmed = trimEdgeGeom(geom, a.x, a.y, R, b.x, b.y, R)
+  if (trimmed.kind === 'curve') {
+    return {
+      ...trimmed,
+      mx: (a.x + 2 * trimmed.cx + b.x) / 4,
+      my: (a.y + 2 * trimmed.cy + b.y) / 4,
+    }
   }
+  return { ...trimmed, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }
 }
 
 // chart geometry
@@ -123,27 +145,36 @@ export function NegativeCycleWalk() {
               { a: NC, b: NT, w: 1, kind: 'plain' },
             ] as const
           ).map(({ a, b, w, kind }) => {
-            const { x1, y1, x2, y2 } = trim(a, b, R)
+            const g = routedEdge(a, b)
             const color =
               kind === 'neg' ? '#dc2626' : kind === 'cycle' ? '#9f1239' : '#9b8a8d'
             const marker =
               kind === 'neg' ? 'url(#ncw-r)' : kind === 'cycle' ? 'url(#ncw-c)' : 'url(#ncw-g)'
-            const mx = (x1 + x2) / 2
-            const my = (y1 + y2) / 2
+            const strokeWidth = kind === 'plain' ? 2 : 3
             return (
               <g key={`${a.id}-${b.id}`}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke={color}
-                  strokeWidth={kind === 'plain' ? 2 : 3}
-                  markerEnd={marker}
-                />
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={color}
+                    strokeWidth={strokeWidth}
+                    markerEnd={marker}
+                  />
+                ) : (
+                  <path
+                    d={g.d}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={strokeWidth}
+                    markerEnd={marker}
+                  />
+                )}
                 <rect
-                  x={mx - 13}
-                  y={my - 11}
+                  x={g.mx - 13}
+                  y={g.my - 11}
                   width={26}
                   height={20}
                   rx={4}
@@ -151,8 +182,8 @@ export function NegativeCycleWalk() {
                   stroke={color}
                 />
                 <text
-                  x={mx}
-                  y={my}
+                  x={g.mx}
+                  y={g.my}
                   textAnchor="middle"
                   dominantBaseline="central"
                   fontSize={12}

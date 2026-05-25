@@ -23,6 +23,7 @@
  */
 
 import { useState } from 'react'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type City = 'A' | 'B' | 'C' | 'D'
 const CITIES: City[] = ['A', 'B', 'C', 'D']
@@ -121,16 +122,57 @@ function allEdges(): { from: Slot; to: Slot }[] {
 
 const EDGES = allEdges()
 
-function trim(a: { x: number; y: number }, b: { x: number; y: number }, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
+/** «Map» tab rects: 4 cities at MAP_POS, radius NR+4 (matches the visible
+ *  circle drawn in that tab). Undirected edges → center-to-center routing,
+ *  no trim. */
+const MAP_R = 22
+const MAP_RECTS: NodeRect[] = CITIES.map((c) => ({
+  id: c,
+  x: MAP_POS[c].x - MAP_R,
+  y: MAP_POS[c].y - MAP_R,
+  w: 2 * MAP_R,
+  h: 2 * MAP_R,
+}))
+const MAP_RECT_BY_ID = new Map<City, NodeRect>(
+  MAP_RECTS.map((r) => [r.id as City, r]),
+)
+
+/** «DAG» tab rects: 16 slots = 4 cities × 4 days, radius NR. Directed
+ *  edges → trim by NR so the arrowhead lands on the destination border. */
+const DAG_RECTS: NodeRect[] = (() => {
+  const out: NodeRect[] = []
+  for (const c of CITIES) {
+    for (let p = 0; p <= M; p++) {
+      out.push({
+        id: `${c}-${p}`,
+        x: DAY_X[p] - NR,
+        y: DAY_Y[c] - NR,
+        w: 2 * NR,
+        h: 2 * NR,
+      })
+    }
   }
+  return out
+})()
+const DAG_RECT_BY_ID = new Map<string, NodeRect>(
+  DAG_RECTS.map((r) => [r.id as string, r]),
+)
+
+function routedMapEdge(fromId: City, toId: City) {
+  const a = MAP_RECT_BY_ID.get(fromId)!
+  const b = MAP_RECT_BY_ID.get(toId)!
+  return routeEdge(a, b, MAP_RECTS)
+}
+
+function routedDagEdge(fromKey: string, toKey: string) {
+  const a = DAG_RECT_BY_ID.get(fromKey)!
+  const b = DAG_RECT_BY_ID.get(toKey)!
+  const ax = a.x + a.w / 2
+  const ay = a.y + a.h / 2
+  const bx = b.x + b.w / 2
+  const by = b.y + b.h / 2
+  const geom = routeEdge(a, b, DAG_RECTS)
+  return trimEdgeGeom(geom, ax, ay, NR, bx, by, NR)
 }
 
 export function LayeredTripPlanner() {
@@ -185,12 +227,16 @@ export function LayeredTripPlanner() {
                 const [a, b] = key.split('-') as [City, City]
                 const na = MAP_POS[a]
                 const nb = MAP_POS[b]
-                const { x1, y1, x2, y2 } = trim(na, nb, NR + 4)
-                const mx = (x1 + x2) / 2
-                const my = (y1 + y2) / 2
+                const g = routedMapEdge(a, b)
+                const mx = g.kind === 'line' ? (na.x + nb.x) / 2 : (na.x + nb.x + 2 * g.cx) / 4
+                const my = g.kind === 'line' ? (na.y + nb.y) / 2 : (na.y + nb.y + 2 * g.cy) / 4
                 return (
                   <g key={key}>
-                    <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#9b8a8d" strokeWidth={2} />
+                    {g.kind === 'line' ? (
+                      <line x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2} stroke="#9b8a8d" strokeWidth={2} />
+                    ) : (
+                      <path d={g.d} fill="none" stroke="#9b8a8d" strokeWidth={2} />
+                    )}
                     <rect x={mx - 12} y={my - 9} width={24} height={17} rx={3} fill="#faf4ee" stroke="#cdbfc0" />
                     <text x={mx} y={my} textAnchor="middle" dominantBaseline="central" fontSize={10} fontWeight={700} fill="#1c1214">
                       {DIST[a][b]}
@@ -304,22 +350,29 @@ export function LayeredTripPlanner() {
                 const ay = DAY_Y[e.from.city]
                 const bx = DAY_X[e.to.day]
                 const by = DAY_Y[e.to.city]
-                const { x1, y1, x2, y2 } = trim({ x: ax, y: ay }, { x: bx, y: by }, NR)
+                const g = routedDagEdge(slotKey(e.from), slotKey(e.to))
                 const key = `${slotKey(e.from)}->${slotKey(e.to)}`
                 const onOpt = PATH_EDGES.has(key)
-                const mx = (x1 + x2) / 2
-                const my = (y1 + y2) / 2
+                const mx = g.kind === 'line' ? (ax + bx) / 2 : (ax + bx + 2 * g.cx) / 4
+                const my = g.kind === 'line' ? (ay + by) / 2 : (ay + by + 2 * g.cy) / 4
+                const stroke = onOpt ? '#9f1239' : '#9b8a8d'
+                const strokeWidth = onOpt ? 2.8 : 1.4
+                const marker = onOpt ? 'url(#ltp-arr-hi)' : 'url(#ltp-arr)'
                 return (
                   <g key={i} opacity={showSolution && !onOpt ? 0.25 : 1}>
-                    <line
-                      x1={x1}
-                      y1={y1}
-                      x2={x2}
-                      y2={y2}
-                      stroke={onOpt ? '#9f1239' : '#9b8a8d'}
-                      strokeWidth={onOpt ? 2.8 : 1.4}
-                      markerEnd={onOpt ? 'url(#ltp-arr-hi)' : 'url(#ltp-arr)'}
-                    />
+                    {g.kind === 'line' ? (
+                      <line
+                        x1={g.x1}
+                        y1={g.y1}
+                        x2={g.x2}
+                        y2={g.y2}
+                        stroke={stroke}
+                        strokeWidth={strokeWidth}
+                        markerEnd={marker}
+                      />
+                    ) : (
+                      <path d={g.d} fill="none" stroke={stroke} strokeWidth={strokeWidth} markerEnd={marker} />
+                    )}
                     <rect
                       x={mx - 11}
                       y={my - 8}

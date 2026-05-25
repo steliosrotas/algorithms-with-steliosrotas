@@ -15,6 +15,7 @@
 import { useMemo, useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 type GNode = { id: string; x: number; y: number }
 
@@ -33,7 +34,28 @@ const NODES: GNode[] = [
   { id: '12', x: 438, y: 190 },
   { id: '13', x: 424, y: 264 },
 ]
-const POS = new Map(NODES.map((n) => [n.id, n]))
+const NODE_R = 18
+const NODE_RECTS: ReadonlyArray<NodeRect> = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - NODE_R,
+  y: n.y - NODE_R,
+  w: NODE_R * 2,
+  h: NODE_R * 2,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r] as const))
+
+/**
+ * Collision-aware edge routing on the multi-component layout: returns a
+ * straight segment (the steady-state case here — every component sits in
+ * its own region of the canvas) or a quadratic Bezier that bends around an
+ * unrelated node. Center-to-center, no border trim. Locks out the «edge
+ * through unrelated node» class of bug structurally per Phase E.4.6.
+ */
+function routedEdge(aId: string, bId: string) {
+  const rectA = NODE_RECT_BY_ID.get(aId)!
+  const rectB = NODE_RECT_BY_ID.get(bId)!
+  return routeEdge(rectA, rectB, NODE_RECTS)
+}
 
 const EDGES: [string, string][] = [
   ['1', '2'], ['1', '3'], ['2', '3'], ['3', '4'], ['3', '5'],
@@ -177,19 +199,29 @@ export function ComponentSweep() {
         >
           {/* edges */}
           {EDGES.map(([a, b], i) => {
-            const A = POS.get(a)!
-            const B = POS.get(b)!
+            const g = routedEdge(a, b)
             const comp = COMP_OF.get(a)!
             const on = visited.has(a) && visited.has(b)
-            return (
+            const stroke = on ? comp.stroke : '#c9bcbe'
+            const strokeWidth = on ? 2.6 : 1.7
+            return g.kind === 'line' ? (
               <line
                 key={i}
-                x1={A.x}
-                y1={A.y}
-                x2={B.x}
-                y2={B.y}
-                stroke={on ? comp.stroke : '#c9bcbe'}
-                strokeWidth={on ? 2.6 : 1.7}
+                x1={g.x1}
+                y1={g.y1}
+                x2={g.x2}
+                y2={g.y2}
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+              />
+            ) : (
+              <path
+                key={i}
+                d={g.d}
+                fill="none"
+                stroke={stroke}
+                strokeWidth={strokeWidth}
                 strokeLinecap="round"
               />
             )

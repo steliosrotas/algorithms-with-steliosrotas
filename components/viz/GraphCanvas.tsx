@@ -15,6 +15,7 @@ import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import type { GraphData, GraphEdge, GraphNodeId, NodeStatus } from './graph-types'
 import { sameEdge } from './graph-types'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 /** Status → node colours. Hard-coded light-surface palette (grey → amber →
  *  crimson → green; red for an out-of-turn click) so it never depends on the
@@ -72,6 +73,23 @@ export function GraphCanvas({
   const isTree = (e: GraphEdge) => treeEdges.some((t) => sameEdge(t, e.a, e.b))
   const isDashed = (e: GraphEdge) => dashedEdges.some((d) => sameEdge(d, e.a, e.b))
 
+  // Collision rects: one inflated bounding box per node (radius = nodeRadius
+  // + 1 px so the rect strictly contains the visible circle). Built per
+  // render — matches the existing `nodeById` / `clickable` pattern above, and
+  // keeps this a server-renderable component so direct MDX usage still works.
+  // `routeEdge` returns straight `kind: 'line'` for the common case; any
+  // future layout that puts an unrelated node on an edge centreline now
+  // auto-curves instead of clipping silently.
+  const rectR = nodeRadius + 1
+  const nodeRects: NodeRect[] = graph.nodes.map((n) => ({
+    id: n.id,
+    x: n.x - rectR,
+    y: n.y - rectR,
+    w: 2 * rectR,
+    h: 2 * rectR,
+  }))
+  const rectById = new Map(nodeRects.map((r) => [r.id, r]))
+
   return (
     <figure className={cn('graph-canvas', className)}>
       <svg
@@ -112,17 +130,34 @@ export function GraphCanvas({
           const A = nodeById.get(e.a)
           const B = nodeById.get(e.b)
           if (!A || !B) return null
+          const rA = rectById.get(e.a)
+          const rB = rectById.get(e.b)
+          if (!rA || !rB) return null
+          const g = routeEdge(rA, rB, nodeRects)
           const tree = isTree(e)
-          return (
+          const stroke = tree ? EDGE_TREE : EDGE_NORMAL
+          const sw = tree ? 3.5 : 2
+          const dash = isDashed(e) ? '5 4' : undefined
+          return g.kind === 'line' ? (
             <line
               key={`edge-${i}`}
-              x1={A.x}
-              y1={A.y}
-              x2={B.x}
-              y2={B.y}
-              stroke={tree ? EDGE_TREE : EDGE_NORMAL}
-              strokeWidth={tree ? 3.5 : 2}
-              strokeDasharray={isDashed(e) ? '5 4' : undefined}
+              x1={g.x1}
+              y1={g.y1}
+              x2={g.x2}
+              y2={g.y2}
+              stroke={stroke}
+              strokeWidth={sw}
+              strokeDasharray={dash}
+              strokeLinecap="round"
+            />
+          ) : (
+            <path
+              key={`edge-${i}`}
+              d={g.d}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={sw}
+              strokeDasharray={dash}
               strokeLinecap="round"
             />
           )

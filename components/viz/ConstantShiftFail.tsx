@@ -21,6 +21,7 @@
  */
 
 import { useState } from 'react'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type CNode = { id: string; x: number; y: number }
 
@@ -38,6 +39,33 @@ type Preset = {
   realShortest: 'A' | 'B'
   caption: { left: string; right: string }
   intro: { realA: string; realB: string }
+  /** Pre-built rect set for collision-aware edge routing (covers every distinct
+   *  node referenced by pathA + pathB). */
+  nodeRects: ReadonlyArray<NodeRect>
+  nodeRectById: ReadonlyMap<string, NodeRect>
+}
+
+const R = 22
+
+function buildRects(paths: CEdge[][]): {
+  nodeRects: ReadonlyArray<NodeRect>
+  nodeRectById: ReadonlyMap<string, NodeRect>
+} {
+  const seen = new Map<string, CNode>()
+  for (const path of paths) {
+    for (const e of path) {
+      seen.set(e.from.id, e.from)
+      seen.set(e.to.id, e.to)
+    }
+  }
+  const rects: NodeRect[] = []
+  for (const n of seen.values()) {
+    rects.push({ id: n.id, x: n.x - R, y: n.y - R, w: R * 2, h: R * 2 })
+  }
+  return {
+    nodeRects: rects,
+    nodeRectById: new Map(rects.map((r) => [String(r.id), r])),
+  }
 }
 
 // ── L17 preset (default) ───────────────────────────────────────────────────
@@ -48,17 +76,21 @@ const B_L17: CNode = { id: 'b', x: 160, y: 238 }
 const C_L17: CNode = { id: 'c', x: 252, y: 238 }
 const D_L17: CNode = { id: 'd', x: 344, y: 238 }
 
-const PRESET_L17: Preset = {
-  pathA: [
+const PRESET_L17_PATHS: CEdge[][] = [
+  [
     { from: S_L17, to: A_L17, base: 1 },
     { from: A_L17, to: T_L17, base: 1 },
   ],
-  pathB: [
+  [
     { from: S_L17, to: B_L17, base: 1 },
     { from: B_L17, to: C_L17, base: 1 },
     { from: C_L17, to: D_L17, base: 1 },
     { from: D_L17, to: T_L17, base: -4 },
   ],
+]
+const PRESET_L17: Preset = {
+  pathA: PRESET_L17_PATHS[0],
+  pathB: PRESET_L17_PATHS[1],
   kNonneg: 4,
   kMax: 5,
   realShortest: 'B',
@@ -67,6 +99,7 @@ const PRESET_L17: Preset = {
     right: 'Διαδρομή B — 4 ακμές',
   },
   intro: { realA: 'A = 2', realB: 'B = −1' },
+  ...buildRects(PRESET_L17_PATHS),
 }
 
 // ── ask10 preset ───────────────────────────────────────────────────────────
@@ -74,13 +107,17 @@ const U_AS: CNode = { id: 'u', x: 80, y: 80 }
 const V_AS: CNode = { id: 'v', x: 252, y: 220 }
 const W_AS: CNode = { id: 'w', x: 424, y: 80 }
 
-const PRESET_ASK10: Preset = {
-  // path A = direct edge u → w; path B = 2-hop u → v → w (the real shortest)
-  pathA: [{ from: U_AS, to: W_AS, base: -3 }],
-  pathB: [
+const PRESET_ASK10_PATHS: CEdge[][] = [
+  [{ from: U_AS, to: W_AS, base: -3 }],
+  [
     { from: U_AS, to: V_AS, base: -1 },
     { from: V_AS, to: W_AS, base: -3 },
   ],
+]
+const PRESET_ASK10: Preset = {
+  // path A = direct edge u → w; path B = 2-hop u → v → w (the real shortest)
+  pathA: PRESET_ASK10_PATHS[0],
+  pathB: PRESET_ASK10_PATHS[1],
   kNonneg: 3,
   kMax: 5,
   realShortest: 'B',
@@ -89,6 +126,7 @@ const PRESET_ASK10: Preset = {
     right: 'Έμμεση u → v → w · 2 ακμές',
   },
   intro: { realA: 'A = −3', realB: 'B = −4' },
+  ...buildRects(PRESET_ASK10_PATHS),
 }
 
 const PRESETS: Record<string, Preset> = {
@@ -96,23 +134,48 @@ const PRESETS: Record<string, Preset> = {
   ask10: PRESET_ASK10,
 }
 
-function trim(a: CNode, b: CNode, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
+/**
+ * Collision-aware edge routing keyed by the active preset. Returns a straight
+ * segment trimmed to the node borders (the steady-state case for both presets)
+ * or a quadratic Bezier that bends around an unrelated node, also trimmed so
+ * the arrowhead lands on the target border. The `mx, my` fields anchor the
+ * weight label at the centerline midpoint for lines and at the Bezier midpoint
+ * `(P0 + 2Q + P2) / 4` for curves. Locks out the «edge through unrelated
+ * node» class of bug structurally per Phase E.4.6.
+ */
+function routedEdge(
+  a: CNode,
+  b: CNode,
+  rects: ReadonlyArray<NodeRect>,
+  rectById: ReadonlyMap<string, NodeRect>,
+) {
+  const rectA = rectById.get(a.id)!
+  const rectB = rectById.get(b.id)!
+  const geom = routeEdge(rectA, rectB, rects)
+  const trimmed = trimEdgeGeom(geom, a.x, a.y, R, b.x, b.y, R)
+  if (trimmed.kind === 'curve') {
+    return {
+      ...trimmed,
+      mx: (a.x + 2 * trimmed.cx + b.x) / 4,
+      my: (a.y + 2 * trimmed.cy + b.y) / 4,
+    }
   }
+  return { ...trimmed, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }
 }
-
-const R = 22
 
 export function ConstantShiftFail({ instance = 'l17' }: { instance?: string } = {}) {
   const preset = PRESETS[instance] ?? PRESET_L17
-  const { pathA, pathB, kNonneg, kMax, realShortest, caption, intro } = preset
+  const {
+    pathA,
+    pathB,
+    kNonneg,
+    kMax,
+    realShortest,
+    caption,
+    intro,
+    nodeRects,
+    nodeRectById,
+  } = preset
   const [k, setK] = useState(0)
 
   const edgesA = pathA.length
@@ -209,26 +272,37 @@ export function ConstantShiftFail({ instance = 'l17' }: { instance?: string } = 
             ]
           ).flatMap(({ edges, path }) =>
             edges.map((e, i) => {
-              const { x1, y1, x2, y2 } = trim(e.from, e.to, R)
+              const g = routedEdge(e.from, e.to, nodeRects, nodeRectById)
               const picked = dijkstraPicks === path
               const w = e.base + k
               const neg = w < 0
-              const mx = (x1 + x2) / 2
-              const my = (y1 + y2) / 2
+              const stroke = picked ? '#9f1239' : '#bdb0b2'
+              const strokeWidth = picked ? 3.6 : 2
+              const markerEnd = picked ? 'url(#csf-arr-hi)' : 'url(#csf-arr)'
               return (
                 <g key={`${path}-${i}`}>
-                  <line
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke={picked ? '#9f1239' : '#bdb0b2'}
-                    strokeWidth={picked ? 3.6 : 2}
-                    markerEnd={picked ? 'url(#csf-arr-hi)' : 'url(#csf-arr)'}
-                  />
+                  {g.kind === 'line' ? (
+                    <line
+                      x1={g.x1}
+                      y1={g.y1}
+                      x2={g.x2}
+                      y2={g.y2}
+                      stroke={stroke}
+                      strokeWidth={strokeWidth}
+                      markerEnd={markerEnd}
+                    />
+                  ) : (
+                    <path
+                      d={g.d}
+                      fill="none"
+                      stroke={stroke}
+                      strokeWidth={strokeWidth}
+                      markerEnd={markerEnd}
+                    />
+                  )}
                   <rect
-                    x={mx - 15}
-                    y={my - 11}
+                    x={g.mx - 15}
+                    y={g.my - 11}
                     width={30}
                     height={21}
                     rx={4}
@@ -236,8 +310,8 @@ export function ConstantShiftFail({ instance = 'l17' }: { instance?: string } = 
                     stroke={neg ? '#dc2626' : picked ? '#9f1239' : '#cdbfc0'}
                   />
                   <text
-                    x={mx}
-                    y={my}
+                    x={g.mx}
+                    y={g.my}
                     textAnchor="middle"
                     dominantBaseline="central"
                     fontSize={12}

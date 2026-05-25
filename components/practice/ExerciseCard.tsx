@@ -23,7 +23,6 @@ import {
 } from '@/content/practice/types'
 import type { Exercise } from '@/content/practice/types'
 import { PrereqChips } from './PrereqChips'
-import { ExamTranscriptionNotice } from '@/components/content/ExamTranscriptionNotice'
 import { useFormulaSheet } from './formula-sheet-store'
 import { SectionComments } from '@/components/layout/SectionComments'
 import { useAppStore } from '@/lib/store'
@@ -80,12 +79,7 @@ export function ExerciseCard({ exercise }: Props) {
             )}
             {ORIGIN_LABELS[exercise.origin]}
           </span>
-          {exercise.paperLabel && (
-            <span className="rounded-full border border-purple-500/40 bg-purple-500/10 px-2 py-0.5 text-[11px] font-semibold text-purple-700 dark:text-purple-300">
-              {exercise.paperLabel}
-            </span>
-          )}
-          {!exercise.paperLabel && exercise.source && (
+          {exercise.source && (
             <span className="rounded-full border border-purple-500/40 bg-purple-500/10 px-2 py-0.5 text-[11px] font-semibold text-purple-700 dark:text-purple-300">
               {SOURCE_LABELS[exercise.source]}
             </span>
@@ -176,9 +170,6 @@ export function ExerciseCard({ exercise }: Props) {
           Εκφώνηση δεν έχει ακόμα μεταγραφεί.
         </p>
       )}
-
-      {/* Takedown notice for transcribed past-exam / frontistirio problems */}
-      {exercise.paperLabel && <ExamTranscriptionNotice />}
 
       {/* Prerequisite chips */}
       <div className="mt-3">

@@ -22,7 +22,7 @@ import {
   MST_POS,
   MST_NODE_R,
   MST_VIEW,
-  trimmedEdge,
+  routeMstEdge,
 } from './mst-graph'
 
 type Mode = 'cut' | 'cycle'
@@ -346,14 +346,24 @@ export function ExchangeArgumentViz() {
           {MST_EDGES.filter((e) => cycleSet.has(e.id)).map((e) => {
             const A = MST_POS.get(e.a)!
             const B = MST_POS.get(e.b)!
-            const g = trimmedEdge(A, B)
-            return (
+            const g = routeMstEdge(A, B)
+            return g.kind === 'line' ? (
               <line
                 key={`glow-${e.id}`}
                 x1={g.x1}
                 y1={g.y1}
                 x2={g.x2}
                 y2={g.y2}
+                stroke="#fb923c"
+                strokeWidth={13}
+                strokeOpacity={0.4}
+                strokeLinecap="round"
+              />
+            ) : (
+              <path
+                key={`glow-${e.id}`}
+                d={g.d}
+                fill="none"
                 stroke="#fb923c"
                 strokeWidth={13}
                 strokeOpacity={0.4}
@@ -366,7 +376,7 @@ export function ExchangeArgumentViz() {
           {MST_EDGES.map((e) => {
             const A = MST_POS.get(e.a)!
             const B = MST_POS.get(e.b)!
-            const g = trimmedEdge(A, B)
+            const g = routeMstEdge(A, B)
             const isE = f.e === e.id
             const isF = f.f === e.id
             const isAmber = amberSet.has(e.id)
@@ -401,16 +411,27 @@ export function ExchangeArgumentViz() {
             }
             return (
               <g key={e.id}>
-                <line
-                  x1={g.x1}
-                  y1={g.y1}
-                  x2={g.x2}
-                  y2={g.y2}
-                  stroke={stroke}
-                  strokeWidth={width}
-                  strokeDasharray={dash}
-                  strokeLinecap="round"
-                />
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={width}
+                    strokeDasharray={dash}
+                    strokeLinecap="round"
+                  />
+                ) : (
+                  <path
+                    d={g.d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={width}
+                    strokeDasharray={dash}
+                    strokeLinecap="round"
+                  />
+                )}
                 <rect
                   x={g.mx - 11}
                   y={g.my - 10}

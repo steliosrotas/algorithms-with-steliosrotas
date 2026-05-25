@@ -17,9 +17,10 @@
  * Step through with prev/next. Built for L13.
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 type TNode = { id: string; x: number; y: number; freq: number; char?: string }
 
@@ -101,6 +102,34 @@ export function HuffmanOptimalityViz() {
   const hotEF = step === 0
   const hotOmega = step >= 1
 
+  const { rects: nodeRects, rectById: nodeRectById } = useMemo(() => {
+    const rects: NodeRect[] = []
+    const byId = new Map<string, NodeRect>()
+    for (const n of Object.values(NODES)) {
+      if (hidden(n.id)) continue
+      const r = isLeaf(n.id) ? 22 : 19
+      const rect: NodeRect = {
+        id: n.id,
+        x: n.x - r,
+        y: n.y - r,
+        w: 2 * r,
+        h: 2 * r,
+      }
+      rects.push(rect)
+      byId.set(n.id, rect)
+    }
+    return { rects, rectById: byId }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collapsed])
+
+  /** Routed parent→child edge geometry, center-to-center. Bit labels are
+   *  anchored at the segment midpoint (or Bezier midpoint when a curve fires). */
+  const routedEdge = (fromId: string, toId: string) => {
+    const a = nodeRectById.get(fromId)!
+    const b = nodeRectById.get(toId)!
+    return routeEdge(a, b, nodeRects)
+  }
+
   return (
     <section className="my-6 rounded-xl border border-border bg-bg-elevated p-4 shadow-sm">
       {/* header */}
@@ -130,24 +159,31 @@ export function HuffmanOptimalityViz() {
             const p = NODES[e.from]
             const c = NODES[e.to]
             const isEF = e.from === 'n14'
-            const mx = (p.x + c.x) / 2
-            const my = (p.y + c.y) / 2
+            const g = routedEdge(e.from, e.to)
+            const baseMx = g.kind === 'line' ? (p.x + c.x) / 2 : (p.x + c.x + 2 * g.cx) / 4
+            const baseMy = g.kind === 'line' ? (p.y + c.y) / 2 : (p.y + c.y + 2 * g.cy) / 4
             const dx = c.x - p.x
             const dy = c.y - p.y
             const L = Math.hypot(dx, dy) || 1
+            const stroke = hotEF && isEF ? '#9f1239' : '#b6a6a8'
+            const strokeWidth = hotEF && isEF ? 3.4 : 1.8
             return (
               <g key={`${e.from}-${e.to}`}>
-                <line
-                  x1={p.x}
-                  y1={p.y}
-                  x2={c.x}
-                  y2={c.y}
-                  stroke={hotEF && isEF ? '#9f1239' : '#b6a6a8'}
-                  strokeWidth={hotEF && isEF ? 3.4 : 1.8}
-                />
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                  />
+                ) : (
+                  <path d={g.d} fill="none" stroke={stroke} strokeWidth={strokeWidth} />
+                )}
                 <text
-                  x={mx + (-dy / L) * 11}
-                  y={my + (dx / L) * 11}
+                  x={baseMx + (-dy / L) * 11}
+                  y={baseMy + (dx / L) * 11}
                   textAnchor="middle"
                   dominantBaseline="central"
                   fontSize={11}

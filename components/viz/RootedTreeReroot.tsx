@@ -17,6 +17,7 @@
  */
 
 import { useMemo, useState } from 'react'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 type RNode = { id: string }
 type REdge = { a: string; b: string }
@@ -121,6 +122,18 @@ export function RootedTreeReroot() {
   const view = useMemo(() => rootAt(root), [root])
   const pos = useMemo(() => layout(view), [view])
 
+  // Collision rects rebuild per root because the layout itself does. Visible
+  // r=17 + 1 px = 18 for the AABB. Lets any future re-rooting that puts a
+  // sibling on a parent-edge centreline auto-curve.
+  const nodeRects = useMemo<NodeRect[]>(() => {
+    const out: NodeRect[] = []
+    for (const [id, p] of pos.entries()) {
+      out.push({ id, x: p.x - 18, y: p.y - 18, w: 36, h: 36 })
+    }
+    return out
+  }, [pos])
+  const rectById = useMemo(() => new Map(nodeRects.map((r) => [r.id, r])), [nodeRects])
+
   const focused = hover ?? root
   const parent = view.parent.get(focused) ?? null
   const kids = view.children.get(focused) ?? []
@@ -154,22 +167,38 @@ export function RootedTreeReroot() {
           >
             {/* edges */}
             {EDGES.map((e, i) => {
-              const A = pos.get(e.a)!
-              const B = pos.get(e.b)!
+              const rA = rectById.get(e.a)!
+              const rB = rectById.get(e.b)!
+              const g = routeEdge(rA, rB, nodeRects)
               const childA = view.parent.get(e.a) === e.b
               const childB = view.parent.get(e.b) === e.a
               const onPathToFocused =
                 (focused === e.a && view.parent.get(e.a) === e.b) ||
                 (focused === e.b && view.parent.get(e.b) === e.a)
-              return (
+              const stroke = onPathToFocused
+                ? '#9f1239'
+                : childA || childB
+                  ? '#3f3535'
+                  : '#cdc6c5'
+              const sw = onPathToFocused ? 4 : 2.5
+              return g.kind === 'line' ? (
                 <line
                   key={`re${i}`}
-                  x1={A.x}
-                  y1={A.y}
-                  x2={B.x}
-                  y2={B.y}
-                  stroke={onPathToFocused ? '#9f1239' : childA || childB ? '#3f3535' : '#cdc6c5'}
-                  strokeWidth={onPathToFocused ? 4 : 2.5}
+                  x1={g.x1}
+                  y1={g.y1}
+                  x2={g.x2}
+                  y2={g.y2}
+                  stroke={stroke}
+                  strokeWidth={sw}
+                  strokeLinecap="round"
+                />
+              ) : (
+                <path
+                  key={`re${i}`}
+                  d={g.d}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={sw}
                   strokeLinecap="round"
                 />
               )

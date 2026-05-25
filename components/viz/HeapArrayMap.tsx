@@ -13,6 +13,7 @@
 
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 /** a valid min-heap, read 1-indexed as H[1..10] */
 const HEAP = [2, 5, 8, 9, 11, 14, 18, 20, 21, 13]
@@ -27,6 +28,30 @@ function nodePos(i: number) {
     x: 44 + ((slot + 0.5) * 492) / slots,
     y: 46 + lvl * 74,
   }
+}
+
+const NODE_R = 21
+
+const NODE_RECTS: NodeRect[] = []
+const NODE_RECT_BY_ID = new Map<number, NodeRect>()
+for (let i = 1; i <= N; i++) {
+  const p = nodePos(i)
+  const r: NodeRect = {
+    id: i,
+    x: p.x - NODE_R,
+    y: p.y - NODE_R,
+    w: 2 * NODE_R,
+    h: 2 * NODE_R,
+  }
+  NODE_RECTS.push(r)
+  NODE_RECT_BY_ID.set(i, r)
+}
+
+/** Routed child→parent edge, center-to-center (no arrowheads on heap edges). */
+function routedEdge(childI: number, parentI: number) {
+  const cR = NODE_RECT_BY_ID.get(childI)!
+  const pR = NODE_RECT_BY_ID.get(parentI)!
+  return routeEdge(cR, pR, NODE_RECTS)
 }
 
 type Rel = 'self' | 'parent' | 'child' | 'none'
@@ -152,18 +177,28 @@ export function HeapArrayMap() {
           {HEAP.map((_, k) => k + 1)
             .filter((i) => i > 1)
             .map((i) => {
-              const c = nodePos(i)
-              const p = nodePos(i >> 1)
+              const g = routedEdge(i, i >> 1)
               const hot = i === sel || i >> 1 === sel
-              return (
+              const stroke = hot ? '#9f1239' : '#c9bcbe'
+              const strokeWidth = hot ? 3 : 1.8
+              return g.kind === 'line' ? (
                 <line
                   key={`e${i}`}
-                  x1={c.x}
-                  y1={c.y}
-                  x2={p.x}
-                  y2={p.y}
-                  stroke={hot ? '#9f1239' : '#c9bcbe'}
-                  strokeWidth={hot ? 3 : 1.8}
+                  x1={g.x1}
+                  y1={g.y1}
+                  x2={g.x2}
+                  y2={g.y2}
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
+                  strokeLinecap="round"
+                />
+              ) : (
+                <path
+                  key={`e${i}`}
+                  d={g.d}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
                   strokeLinecap="round"
                 />
               )

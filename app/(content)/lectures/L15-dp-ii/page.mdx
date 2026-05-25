@@ -161,6 +161,15 @@ $$
 
 <KnapsackTable />
 
+<ExamProblem
+  relatedExerciseId="pt4-th4"
+  pattern={
+    <>
+      <strong>Αν δεις «n αντικείμενα με χρονικό/χωρικό κόστος και αξία, και ένα όριο πόρου» σε άλλο ντύσιμο</strong> — διαφημίσεις χορηγών εδώ, projects με χρόνο και κέρδος, αρχεία και μνήμη — η αναδρομή είναι <em>ακριβώς</em> του σακιδίου με μετονομασμένες μεταβλητές: «διάρκεια» <InlineMath>{'t_i'}</InlineMath> ↔ βάρος <InlineMath>{'w_i'}</InlineMath>, «κέρδος» <InlineMath>{'p_i'}</InlineMath> ↔ αξία <InlineMath>{'v_i'}</InlineMath>, «διαθέσιμος χρόνος» <InlineMath>{'T'}</InlineMath> ↔ χωρητικότητα <InlineMath>{'W'}</InlineMath>. Πίνακας <InlineMath>{'(n+1)(T+1)'}</InlineMath>, χρόνος <InlineMath>{'\\Theta(nT)'}</InlineMath>, ανάκτηση επιλογών σε <InlineMath>{'O(n)'}</InlineMath> με πέρασμα προς τα πίσω. <strong>Παγίδα στο (ε):</strong> αν προστεθεί <em>σταθερή θυρίδα</em> <InlineMath>{'[s_i,\\,s_i+t_i]'}</InlineMath> στον χρόνο, χάνεται η ελευθερία τοποθέτησης — μεταπηδά σε <strong>Σταθμισμένο Χρονοπρογραμματισμό Διαστημάτων</strong> (<a className="underline" href="/lectures/L14-dp-i">L14</a>), <InlineMath>{'O(n \\log n)'}</InlineMath> γνήσια πολυωνυμικό αντί για ψευδοπολυωνυμικό <InlineMath>{'\\Theta(nT)'}</InlineMath>. Η λέξη που τα ξεχωρίζει: <em>σταθερή θυρίδα</em> στον χρόνο.
+    </>
+  }
+/>
+
 ### Πολυπλοκότητα — μια λεπτή παγίδα
 
 Ο αλγόριθμος γεμίζει έναν πίνακα $n \times W$, ένα κελί τη φορά, άρα τρέχει σε $\Theta(n \cdot W)$. Δεν έχει εκθέτες, δεν έχει $2^n$ — **μοιάζει** πολυωνυμικός. Δεν είναι.
@@ -259,6 +268,15 @@ $$
 </svg>
 </div>
 
+<ExamProblem
+  relatedExerciseId="pt2-th3"
+  pattern={
+    <>
+      <strong>Αν δεις άλλη ερώτηση πάνω σε δύο ακολουθίες</strong> — συντομότερη κοινή <em>υπερ</em>ακολουθία (SCS), edit distance, longest palindromic subsequence — ο πίνακας <InlineMath>{'\\text{OPT}(i, j)'}</InlineMath> πάνω σε <em>προθέματα</em> είναι ο σωστός φακός. Όταν <InlineMath>{'x_i = y_j'}</InlineMath>, διαγώνια. Όταν διαφέρουν, αλλάζει <em>μόνο</em> τι ζητάς: <InlineMath>{'\\max'}</InlineMath> από πάνω/αριστερά για «μέγιστο όμοιο μήκος» (LCS), <InlineMath>{'1 + \\min'}</InlineMath> από πάνω/αριστερά για «ελάχιστο μήκος που τα χωράει και τα δύο» (SCS). Πολυπλοκότητα ίδια <InlineMath>{'\\Theta(mn)'}</InlineMath>· μάλιστα ισχύει η ταυτότητα <InlineMath>{'|\\text{SCS}| + |\\text{LCS}| = m + n'}</InlineMath> — δύο όψεις του ίδιου νομίσματος.
+    </>
+  }
+/>
+
 ### Ο αλγόριθμος
 
 <Algorithm
@@ -293,6 +311,15 @@ $$
 <LcsTable />
 
 Ο πίνακας έχει $(m+1)(n+1)$ κελιά, κάθε ένα υπολογίζεται σε $O(1)$ → **πολυπλοκότητα $\Theta(mn)$**. Το κάτω-δεξιά κελί $M[m, n]$ δίνει το **μήκος**· το πέρασμα προς τα πίσω από εκεί δίνει μια **συγκεκριμένη** μέγιστη κοινή υπακολουθία (εδώ, το `BCB`).
+
+<ExamProblem
+  relatedExerciseId="pt2-th1-q8"
+  pattern={
+    <>
+      <strong>Σε ερωτήσεις «ποια από τα παρακάτω είναι ορθά φράγματα της πολυπλοκότητας της X;»</strong> η συνταγή είναι σταθερή: <em>πρώτα</em> βγάλε την πραγματική τιμή (εδώ μόλις την κερδίσαμε — <InlineMath>{'\\Theta(mn)'}</InlineMath>), <em>μετά</em> κρίνε κάθε φράγμα μεμονωμένα. <InlineMath>{'O(f)'}</InlineMath> σωστό αν <InlineMath>{'\\text{real} = O(f)'}</InlineMath>· <InlineMath>{'\\Omega(f)'}</InlineMath> σωστό αν <InlineMath>{'\\text{real} = \\Omega(f)'}</InlineMath>· <InlineMath>{'\\Theta(f)'}</InlineMath> σωστό <em>μόνο</em> αν είναι και τα δύο. <strong>Παγίδα:</strong> το <InlineMath>{'\\Theta'}</InlineMath> έχει «διπλή πόρτα» — π.χ. <InlineMath>{'\\Theta(mn \\log n)'}</InlineMath> είναι <em>λάθος</em> για την LCS παρ' όλο που χωράει άνω το <InlineMath>{'mn'}</InlineMath> (αποτυγχάνει το κάτω). Αντίστροφα, <InlineMath>{'O(n^2 m^2)'}</InlineMath> είναι σωστό γιατί απλώς ζητάει άνω φράγμα — δεν χρειάζεται «σφικτό».
+    </>
+  }
+/>
 
 <RecallCard
   algorithm="Μέγιστη κοινή υπακολουθία (LCS)"

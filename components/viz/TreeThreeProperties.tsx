@@ -24,6 +24,7 @@
 import { useMemo, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 type TNode = { id: string; x: number; y: number }
 type TEdge = { id: string; a: string; b: string }
@@ -37,7 +38,22 @@ const NODES: TNode[] = [
   { id: 'E', x: 230, y: 260 },
   { id: 'F', x: 380, y: 230 },
 ]
-const POS = new Map(NODES.map((n) => [n.id, n]))
+// Collision rects — visible r=22 + 1 px so the rect strictly contains the
+// circle. Routes every candidate edge (incl. the "ghost" diagonals AE, BF,
+// DF) around any other node that would clip the segment.
+const NODE_R = 22
+const RECT_R = NODE_R + 1
+const TT_RECTS: NodeRect[] = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - RECT_R,
+  y: n.y - RECT_R,
+  w: 2 * RECT_R,
+  h: 2 * RECT_R,
+}))
+const TT_RECT_BY_ID = new Map(TT_RECTS.map((r) => [r.id, r]))
+function routeTTEdge(a: string, b: string) {
+  return routeEdge(TT_RECT_BY_ID.get(a)!, TT_RECT_BY_ID.get(b)!, TT_RECTS)
+}
 
 // All candidate edges we ever expose (some are "ghost", student adds them)
 const ALL_EDGES: TEdge[] = [
@@ -291,8 +307,7 @@ export function TreeThreeProperties() {
             xmlns="http://www.w3.org/2000/svg"
           >
             {ALL_EDGES.map((e) => {
-              const A = POS.get(e.a)!
-              const B = POS.get(e.b)!
+              const g = routeTTEdge(e.a, e.b)
               const isOn = on.has(e.id)
               const inCycle = cycleSet?.has(e.id) ?? false
               const stroke = inCycle ? '#dc2626' : isOn ? '#1c1214' : '#cfc6c5'
@@ -300,27 +315,49 @@ export function TreeThreeProperties() {
               const dash = isOn ? undefined : '5 4'
               return (
                 <g key={e.id}>
-                  <line
-                    x1={A.x}
-                    y1={A.y}
-                    x2={B.x}
-                    y2={B.y}
-                    stroke={stroke}
-                    strokeWidth={sw}
-                    strokeDasharray={dash}
-                    strokeLinecap="round"
-                  />
-                  {/* fat invisible hit target */}
-                  <line
-                    x1={A.x}
-                    y1={A.y}
-                    x2={B.x}
-                    y2={B.y}
-                    stroke="transparent"
-                    strokeWidth={18}
-                    className="cursor-pointer"
-                    onClick={() => toggle(e.id)}
-                  />
+                  {g.kind === 'line' ? (
+                    <>
+                      <line
+                        x1={g.x1}
+                        y1={g.y1}
+                        x2={g.x2}
+                        y2={g.y2}
+                        stroke={stroke}
+                        strokeWidth={sw}
+                        strokeDasharray={dash}
+                        strokeLinecap="round"
+                      />
+                      <line
+                        x1={g.x1}
+                        y1={g.y1}
+                        x2={g.x2}
+                        y2={g.y2}
+                        stroke="transparent"
+                        strokeWidth={18}
+                        className="cursor-pointer"
+                        onClick={() => toggle(e.id)}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <path
+                        d={g.d}
+                        fill="none"
+                        stroke={stroke}
+                        strokeWidth={sw}
+                        strokeDasharray={dash}
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d={g.d}
+                        fill="none"
+                        stroke="transparent"
+                        strokeWidth={18}
+                        className="cursor-pointer"
+                        onClick={() => toggle(e.id)}
+                      />
+                    </>
+                  )}
                 </g>
               )
             })}

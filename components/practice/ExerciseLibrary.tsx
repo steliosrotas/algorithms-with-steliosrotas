@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   GraduationCap,
   Search,
@@ -31,6 +31,38 @@ export function ExerciseLibrary({ exercises }: Props) {
   const solvedSet = useAppStore((s) => s.solvedExercises)
   const isSolved = (id: string) =>
     hydrated && solvedSet.has(`${PRACTICE_SOLVED_PREFIX}:${id}`)
+
+  // Deep links to `/practice#exercise:<id>` come from <ExamRadar> badges,
+  // SOSE coaching panels, and cross-references inside problem solutions.
+  // The default origin filter is 'past-exam', so any frontistirio or lecture
+  // exercise linked from one of those badges would be hidden, the anchor
+  // target would not exist in the DOM, and the browser's native
+  // scroll-to-anchor would silently do nothing. Clear ALL filters when a
+  // `#exercise:<id>` hash is present, then programmatically scroll once the
+  // filtered list has re-rendered.
+  useEffect(() => {
+    const applyHashTarget = () => {
+      if (typeof window === 'undefined') return
+      const hash = window.location.hash
+      if (!hash.startsWith('#exercise:')) return
+      const targetId = decodeURIComponent(hash.slice('#exercise:'.length))
+      if (!targetId) return
+      setOriginFilter('all')
+      setTopics(new Set())
+      setUnsolvedOnly(false)
+      // Two rAFs: first to let React commit the filter changes, second to
+      // wait for the layout pass that paints the newly-visible card.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const el = document.getElementById(`exercise:${targetId}`)
+          el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        })
+      })
+    }
+    applyHashTarget()
+    window.addEventListener('hashchange', applyHashTarget)
+    return () => window.removeEventListener('hashchange', applyHashTarget)
+  }, [])
 
   const handleTopicToggle = (t: Topic) => {
     setTopics((prev) => {
@@ -86,11 +118,13 @@ export function ExerciseLibrary({ exercises }: Props) {
       const ra = orderRank(a.origin)
       const rb = orderRank(b.origin)
       if (ra !== rb) return ra - rb
-      // Within the same origin, group by anonymised paper label, then by
-      // the printed problem number.
-      const la = a.paperLabel ?? ''
-      const lb = b.paperLabel ?? ''
-      if (la !== lb) return la.localeCompare(lb, 'el')
+      // Within the same origin, group by source (dated paper), then by the
+      // printed problem number. Sources are kebab-case slugs like
+      // 'june-2025'; ordering them lexically gives a stable, semester-aware
+      // grouping (june-2024 < june-2025 < sept-2024 < sept-2025).
+      const la = a.source ?? ''
+      const lb = b.source ?? ''
+      if (la !== lb) return la.localeCompare(lb, 'en')
       return (a.problemNumber ?? '').localeCompare(b.problemNumber ?? '', 'el')
     })
   }, [filtered])

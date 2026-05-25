@@ -18,6 +18,7 @@
  */
 
 import { useState } from 'react'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type CNode = { id: string; x: number; y: number }
 
@@ -38,16 +39,23 @@ const PATH_B: { from: CNode; to: CNode; base: number }[] = [
   { from: B1, to: T, base: 2 },
 ]
 
-function trim(a: CNode, b: CNode, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
+const ALL_NODES: CNode[] = [S, A1, A2, B1, T]
+const NODE_RECTS: NodeRect[] = ALL_NODES.map((n) => ({
+  id: n.id,
+  x: n.x - R,
+  y: n.y - R,
+  w: 2 * R,
+  h: 2 * R,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r]))
+
+function routedEdge(a: CNode, b: CNode) {
+  const aRect = NODE_RECT_BY_ID.get(a.id)!
+  const bRect = NODE_RECT_BY_ID.get(b.id)!
+  const geom = trimEdgeGeom(routeEdge(aRect, bRect, NODE_RECTS), a.x, a.y, R, b.x, b.y, R)
+  const mx = geom.kind === 'line' ? (a.x + b.x) / 2 : (a.x + b.x + 2 * geom.cx) / 4
+  const my = geom.kind === 'line' ? (a.y + b.y) / 2 : (a.y + b.y + 2 * geom.cy) / 4
+  return { ...geom, mx, my }
 }
 
 type Panel = 'mult' | 'add'
@@ -141,27 +149,38 @@ function PathGraph({
             { edges: PATH_B, color: '#b45309', light: '#fef3c7', isWinner: winner === 'B', marker: `url(#mvap-arr-B-${panel})` },
           ]).flatMap(({ edges, color, light, isWinner, marker }) =>
             edges.map((e, i) => {
-              const { x1, y1, x2, y2 } = trim(e.from, e.to, R)
+              const g = routedEdge(e.from, e.to)
               const w = transform(e.base)
-              const mx = (x1 + x2) / 2
-              const my = (y1 + y2) / 2
               const label = panel === 'mult'
                 ? `${factor}·${e.base}=${w}`
                 : `${e.base}+${shift}=${w}`
+              const stroke = isWinner ? color : '#bdb0b2'
+              const strokeWidth = isWinner ? 3.2 : 1.8
+              const markerEnd = isWinner ? marker : `url(#mvap-arr-${panel})`
               return (
                 <g key={`${color}-${i}`}>
-                  <line
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke={isWinner ? color : '#bdb0b2'}
-                    strokeWidth={isWinner ? 3.2 : 1.8}
-                    markerEnd={isWinner ? marker : `url(#mvap-arr-${panel})`}
-                  />
+                  {g.kind === 'line' ? (
+                    <line
+                      x1={g.x1}
+                      y1={g.y1}
+                      x2={g.x2}
+                      y2={g.y2}
+                      stroke={stroke}
+                      strokeWidth={strokeWidth}
+                      markerEnd={markerEnd}
+                    />
+                  ) : (
+                    <path
+                      d={g.d}
+                      fill="none"
+                      stroke={stroke}
+                      strokeWidth={strokeWidth}
+                      markerEnd={markerEnd}
+                    />
+                  )}
                   <rect
-                    x={mx - 30}
-                    y={my - 11}
+                    x={g.mx - 30}
+                    y={g.my - 11}
                     width={60}
                     height={20}
                     rx={4}
@@ -169,8 +188,8 @@ function PathGraph({
                     stroke={isWinner ? color : '#cdbfc0'}
                   />
                   <text
-                    x={mx}
-                    y={my}
+                    x={g.mx}
+                    y={g.my}
                     textAnchor="middle"
                     dominantBaseline="central"
                     fontSize={11}

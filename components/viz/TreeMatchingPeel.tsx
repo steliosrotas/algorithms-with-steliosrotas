@@ -20,6 +20,7 @@
 import { useMemo, useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 type Vertex = { id: number; x: number; y: number }
 type Edge = [number, number]
@@ -195,6 +196,8 @@ const INSTANCES = { ok: TREE_OK, fail: TREE_FAIL } as const
 
 type InstanceKey = keyof typeof INSTANCES
 
+const TMP_NODE_R = 14
+
 export function TreeMatchingPeel() {
   const [tab, setTab] = useState<InstanceKey>('ok')
   const tree = INSTANCES[tab]
@@ -209,6 +212,30 @@ export function TreeMatchingPeel() {
     () => new Set(current.matched.map(([u, v]) => `${Math.min(u, v)}-${Math.max(u, v)}`)),
     [current.matched],
   )
+
+  const { rects: nodeRects, rectById: nodeRectById } = useMemo(() => {
+    const rects: NodeRect[] = []
+    const byId = new Map<number, NodeRect>()
+    for (const v of tree.vertices) {
+      const r: NodeRect = {
+        id: v.id,
+        x: v.x - TMP_NODE_R,
+        y: v.y - TMP_NODE_R,
+        w: 2 * TMP_NODE_R,
+        h: 2 * TMP_NODE_R,
+      }
+      rects.push(r)
+      byId.set(v.id, r)
+    }
+    return { rects, rectById: byId }
+  }, [tree])
+
+  /** Routed undirected edge, center-to-center (no arrowheads). */
+  const routedEdge = (u: number, v: number) => {
+    const aR = nodeRectById.get(u)!
+    const bR = nodeRectById.get(v)!
+    return routeEdge(aR, bR, nodeRects)
+  }
 
   return (
     <section className="my-6 rounded-xl border border-border bg-bg-elevated p-4 shadow-sm">
@@ -267,8 +294,6 @@ export function TreeMatchingPeel() {
           >
             {/* edges */}
             {tree.edges.map(([u, v]) => {
-              const a = tree.vertices.find((x) => x.id === u)!
-              const b = tree.vertices.find((x) => x.id === v)!
               const key = `${Math.min(u, v)}-${Math.max(u, v)}`
               const isMatched = matchedKeys.has(key)
               const isDead = removed.has(u) || removed.has(v)
@@ -277,22 +302,29 @@ export function TreeMatchingPeel() {
                 (current.pickedLeaf === u || current.pickedLeaf === v) &&
                 current.kind === 'match' &&
                 isMatched
-              return (
+              const g = routedEdge(u, v)
+              const stroke = isMatched ? '#059669' : isDead ? '#e5d6d7' : '#9b8a8d'
+              const strokeWidth = isCandidate ? 4 : isMatched ? 3.5 : 2
+              const strokeOpacity = isDead && !isMatched ? 0.35 : 1
+              return g.kind === 'line' ? (
                 <line
                   key={key}
-                  x1={a.x}
-                  y1={a.y}
-                  x2={b.x}
-                  y2={b.y}
-                  stroke={
-                    isMatched
-                      ? '#059669'
-                      : isDead
-                        ? '#e5d6d7'
-                        : '#9b8a8d'
-                  }
-                  strokeWidth={isCandidate ? 4 : isMatched ? 3.5 : 2}
-                  strokeOpacity={isDead && !isMatched ? 0.35 : 1}
+                  x1={g.x1}
+                  y1={g.y1}
+                  x2={g.x2}
+                  y2={g.y2}
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
+                  strokeOpacity={strokeOpacity}
+                />
+              ) : (
+                <path
+                  key={key}
+                  d={g.d}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
+                  strokeOpacity={strokeOpacity}
                 />
               )
             })}

@@ -19,6 +19,7 @@
 import { useMemo, useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type DNode = { id: string; x: number; y: number }
 
@@ -33,6 +34,14 @@ const NODES: DNode[] = [
 const POS = new Map(NODES.map((n) => [n.id, n]))
 const N = NODES.length
 const R = 21
+const NODE_RECTS: ReadonlyArray<NodeRect> = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - R,
+  y: n.y - R,
+  w: R * 2,
+  h: R * 2,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r] as const))
 
 /** Directed 6-cycle + two chords. The cycle alone is already strongly
  *  connected; the chords just make the BFS layers branch. */
@@ -207,16 +216,18 @@ function buildFrames(which: 'strong' | 'weak', start: string): Frame[] {
   return frames
 }
 
-function endpoints(a: DNode, b: DNode, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
+/**
+ * Collision-aware edge routing: returns a straight segment trimmed to the
+ * node borders (the steady-state case for this 6-node directed layout) or a
+ * quadratic Bezier that bends around an unrelated node, also trimmed so the
+ * arrowhead lands on the target border. Locks out the «edge through unrelated
+ * node» class of bug structurally per Phase E.4.6.
+ */
+function routedEdge(a: DNode, b: DNode) {
+  const rectA = NODE_RECT_BY_ID.get(a.id)!
+  const rectB = NODE_RECT_BY_ID.get(b.id)!
+  const geom = routeEdge(rectA, rectB, NODE_RECTS)
+  return trimEdgeGeom(geom, a.x, a.y, R + 2, b.x, b.y, R + 2)
 }
 
 function CondPill({
@@ -345,18 +356,30 @@ export function StrongConnectivityViz() {
           {drawEdges.map(([from, to], i) => {
             const A = POS.get(from)!
             const B = POS.get(to)!
-            const { x1, y1, x2, y2 } = endpoints(A, B, R + 2)
+            const g = routedEdge(A, B)
             const explored = f.reached.has(from) && f.reached.has(to)
-            return (
+            const stroke = explored ? '#1d4ed8' : '#c9bcbe'
+            const strokeWidth = explored ? 2.7 : 1.8
+            const markerEnd = explored ? 'url(#sc-arr-on)' : 'url(#sc-arr)'
+            return g.kind === 'line' ? (
               <line
                 key={i}
-                x1={x1}
-                y1={y1}
-                x2={x2}
-                y2={y2}
-                stroke={explored ? '#1d4ed8' : '#c9bcbe'}
-                strokeWidth={explored ? 2.7 : 1.8}
-                markerEnd={explored ? 'url(#sc-arr-on)' : 'url(#sc-arr)'}
+                x1={g.x1}
+                y1={g.y1}
+                x2={g.x2}
+                y2={g.y2}
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                markerEnd={markerEnd}
+              />
+            ) : (
+              <path
+                key={i}
+                d={g.d}
+                fill="none"
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                markerEnd={markerEnd}
               />
             )
           })}

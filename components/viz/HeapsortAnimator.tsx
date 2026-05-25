@@ -15,6 +15,7 @@
 import { useMemo, useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 const INPUT = [7, 2, 9, 4, 11, 5]
 
@@ -118,12 +119,39 @@ function nodePos(i: number) {
   }
 }
 
+const NODE_R = 18
+
 export function HeapsortAnimator() {
   const steps = useMemo(buildSteps, [])
   const last = steps.length - 1
   const [step, setStep] = useState(0)
   const cur = steps[step]
   const n = cur.heap.length
+
+  const { rects: nodeRects, rectById: nodeRectById } = useMemo(() => {
+    const rects: NodeRect[] = []
+    const byId = new Map<number, NodeRect>()
+    for (let i = 0; i < n; i++) {
+      const p = nodePos(i)
+      const r: NodeRect = {
+        id: i,
+        x: p.x - NODE_R,
+        y: p.y - NODE_R,
+        w: 2 * NODE_R,
+        h: 2 * NODE_R,
+      }
+      rects.push(r)
+      byId.set(i, r)
+    }
+    return { rects, rectById: byId }
+  }, [n])
+
+  /** Routed child→parent edge, center-to-center (no arrowheads). */
+  const routedEdge = (childI: number, parentI: number) => {
+    const cR = nodeRectById.get(childI)!
+    const pR = nodeRectById.get(parentI)!
+    return routeEdge(cR, pR, nodeRects)
+  }
 
   const phaseLabel =
     cur.phase === 'init'
@@ -168,15 +196,23 @@ export function HeapsortAnimator() {
               {/* edges */}
               {cur.heap.map((_, i) => {
                 if (i === 0) return null
-                const c = nodePos(i)
-                const p = nodePos((i - 1) >> 1)
-                return (
+                const g = routedEdge(i, (i - 1) >> 1)
+                return g.kind === 'line' ? (
                   <line
                     key={`e${i}`}
-                    x1={c.x}
-                    y1={c.y}
-                    x2={p.x}
-                    y2={p.y}
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke="#c9bcbe"
+                    strokeWidth={1.8}
+                    strokeLinecap="round"
+                  />
+                ) : (
+                  <path
+                    key={`e${i}`}
+                    d={g.d}
+                    fill="none"
                     stroke="#c9bcbe"
                     strokeWidth={1.8}
                     strokeLinecap="round"

@@ -23,6 +23,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Pause, Play, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 type CNode = { id: string; x: number; y: number }
 type CEdge = { a: string; b: string; bridge?: boolean }
@@ -135,6 +136,30 @@ const COMP_COLORS = [
   { fill: '#86efac', stroke: '#16a34a', light: '#f0fdf4' },
   { fill: '#93c5fd', stroke: '#2563eb', light: '#eff6ff' },
 ]
+
+// --- collision rects, one per graph (visible node radius r=16 + 1 px) ---
+const NODE_R = 16
+const RECT_R = NODE_R + 1
+function buildRects(nodes: CNode[]): NodeRect[] {
+  return nodes.map((n) => ({
+    id: n.id,
+    x: n.x - RECT_R,
+    y: n.y - RECT_R,
+    w: 2 * RECT_R,
+    h: 2 * RECT_R,
+  }))
+}
+const TRI_RECTS = buildRects(TRI_NODES)
+const TRI_RECT_BY_ID = new Map(TRI_RECTS.map((r) => [r.id, r]))
+const BR_RECTS = buildRects(BR_NODES)
+const BR_RECT_BY_ID = new Map(BR_RECTS.map((r) => [r.id, r]))
+
+function routeTriEdge(a: string, b: string) {
+  return routeEdge(TRI_RECT_BY_ID.get(a)!, TRI_RECT_BY_ID.get(b)!, TRI_RECTS)
+}
+function routeBrEdge(a: string, b: string) {
+  return routeEdge(BR_RECT_BY_ID.get(a)!, BR_RECT_BY_ID.get(b)!, BR_RECTS)
+}
 
 export function ConnectivityExplorer() {
   const [tab, setTab] = useState<Tab>('fill')
@@ -255,20 +280,30 @@ export function ConnectivityExplorer() {
                 xmlns="http://www.w3.org/2000/svg"
               >
                 {TRI_EDGES.map((e, i) => {
-                  const A = TRI_NODES.find((n) => n.id === e.a)!
-                  const B = TRI_NODES.find((n) => n.id === e.b)!
+                  const g = routeTriEdge(e.a, e.b)
                   const lit =
                     (distOf.get(e.a) ?? Infinity) <= step - 1 &&
                     (distOf.get(e.b) ?? Infinity) <= step - 1
-                  return (
+                  const stroke = lit ? seedColor.stroke : '#d6d3d1'
+                  const sw = lit ? 3.5 : 2
+                  return g.kind === 'line' ? (
                     <line
                       key={`te${i}`}
-                      x1={A.x}
-                      y1={A.y}
-                      x2={B.x}
-                      y2={B.y}
-                      stroke={lit ? seedColor.stroke : '#d6d3d1'}
-                      strokeWidth={lit ? 3.5 : 2}
+                      x1={g.x1}
+                      y1={g.y1}
+                      x2={g.x2}
+                      y2={g.y2}
+                      stroke={stroke}
+                      strokeWidth={sw}
+                      strokeLinecap="round"
+                    />
+                  ) : (
+                    <path
+                      key={`te${i}`}
+                      d={g.d}
+                      fill="none"
+                      stroke={stroke}
+                      strokeWidth={sw}
                       strokeLinecap="round"
                     />
                   )
@@ -396,32 +431,61 @@ export function ConnectivityExplorer() {
                 xmlns="http://www.w3.org/2000/svg"
               >
                 {BR_EDGES.map((e, i) => {
-                  const A = BR_NODES.find((n) => n.id === e.a)!
-                  const B = BR_NODES.find((n) => n.id === e.b)!
+                  const g = routeBrEdge(e.a, e.b)
                   const cut = removed.has(i)
                   const isBr = e.bridge
+                  const stroke = cut ? '#dc2626' : isBr ? '#0ea5e9' : '#9b8a8d'
+                  const sw = cut ? 1.5 : isBr ? 3 : 2.5
+                  const dash = cut || isBr ? '5 4' : undefined
+                  // Render BOTH the visible edge and the 20-px hit target with
+                  // matching geometry — line case stays two <line>s, curve
+                  // case stays two <path>s so the click target follows the
+                  // visible arc instead of running along the straight chord.
                   return (
                     <g key={`be${i}`}>
-                      <line
-                        x1={A.x}
-                        y1={A.y}
-                        x2={B.x}
-                        y2={B.y}
-                        stroke={cut ? '#dc2626' : isBr ? '#0ea5e9' : '#9b8a8d'}
-                        strokeWidth={cut ? 1.5 : isBr ? 3 : 2.5}
-                        strokeDasharray={cut || isBr ? '5 4' : undefined}
-                        strokeLinecap="round"
-                      />
-                      <line
-                        x1={A.x}
-                        y1={A.y}
-                        x2={B.x}
-                        y2={B.y}
-                        stroke="transparent"
-                        strokeWidth={20}
-                        className="cursor-pointer"
-                        onClick={() => toggleEdge(i)}
-                      />
+                      {g.kind === 'line' ? (
+                        <>
+                          <line
+                            x1={g.x1}
+                            y1={g.y1}
+                            x2={g.x2}
+                            y2={g.y2}
+                            stroke={stroke}
+                            strokeWidth={sw}
+                            strokeDasharray={dash}
+                            strokeLinecap="round"
+                          />
+                          <line
+                            x1={g.x1}
+                            y1={g.y1}
+                            x2={g.x2}
+                            y2={g.y2}
+                            stroke="transparent"
+                            strokeWidth={20}
+                            className="cursor-pointer"
+                            onClick={() => toggleEdge(i)}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <path
+                            d={g.d}
+                            fill="none"
+                            stroke={stroke}
+                            strokeWidth={sw}
+                            strokeDasharray={dash}
+                            strokeLinecap="round"
+                          />
+                          <path
+                            d={g.d}
+                            fill="none"
+                            stroke="transparent"
+                            strokeWidth={20}
+                            className="cursor-pointer"
+                            onClick={() => toggleEdge(i)}
+                          />
+                        </>
+                      )}
                     </g>
                   )
                 })}

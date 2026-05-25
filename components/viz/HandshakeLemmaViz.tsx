@@ -20,7 +20,7 @@ import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Play, Pause, RotateCcw } from 'lucide-react'
 import { useEffect } from 'react'
 import { cn } from '@/lib/utils'
-import { L06_GRAPH, neighbors } from './graph-types'
+import { L06_GRAPH, neighbors, routeL06GraphEdge } from './graph-types'
 
 const IDS = [1, 2, 3, 4, 5, 6, 7, 8]
 const NODE = new Map(L06_GRAPH.nodes.map((n) => [n.id, n]))
@@ -150,27 +150,46 @@ export function HandshakeLemmaViz() {
             {EDGES.map((e, i) => {
               const A = NODE.get(e.a)!
               const B = NODE.get(e.b)!
+              const g = routeL06GraphEdge(e.a, e.b)
               const st = edgeStateAt(i)
               const stroke =
                 st === 'in' ? '#9f1239' : st === 'next' ? '#f59e0b' : '#d6d3d1'
               const sw = st === 'in' ? 4 : st === 'next' ? 4 : 1.5
               const dash = st === 'ghost' ? '4 4' : undefined
+              // Label anchor: for a line, the segment midpoint; for a curve,
+              // the Bezier midpoint (P0 + 2Q + P2) / 4 = (M + Q) / 2 — keeps
+              // the "+1 +1" tag pinned to the visible edge in both cases.
+              const lx =
+                g.kind === 'line' ? (A.x + B.x) / 2 : (A.x + B.x + 2 * g.cx) / 4
+              const ly =
+                g.kind === 'line' ? (A.y + B.y) / 2 : (A.y + B.y + 2 * g.cy) / 4
               return (
                 <g key={`e${i}`}>
-                  <line
-                    x1={A.x}
-                    y1={A.y}
-                    x2={B.x}
-                    y2={B.y}
-                    stroke={stroke}
-                    strokeWidth={sw}
-                    strokeDasharray={dash}
-                    strokeLinecap="round"
-                  />
+                  {g.kind === 'line' ? (
+                    <line
+                      x1={g.x1}
+                      y1={g.y1}
+                      x2={g.x2}
+                      y2={g.y2}
+                      stroke={stroke}
+                      strokeWidth={sw}
+                      strokeDasharray={dash}
+                      strokeLinecap="round"
+                    />
+                  ) : (
+                    <path
+                      d={g.d}
+                      fill="none"
+                      stroke={stroke}
+                      strokeWidth={sw}
+                      strokeDasharray={dash}
+                      strokeLinecap="round"
+                    />
+                  )}
                   {st === 'next' && (
                     <text
-                      x={(A.x + B.x) / 2}
-                      y={(A.y + B.y) / 2 - 8}
+                      x={lx}
+                      y={ly - 8}
                       textAnchor="middle"
                       fontSize={11}
                       fontWeight={700}

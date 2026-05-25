@@ -18,6 +18,7 @@
 import { useMemo, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type Node = { id: string; x: number; y: number }
 type Preset = {
@@ -70,18 +71,6 @@ const VIEW_W = 600
 const VIEW_H = 304
 const R = 24
 
-function trim(a: Node, b: Node, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
-}
-
 export function DagSourceWalk() {
   const [preset, setPreset] = useState<'dag' | 'source-free'>('dag')
   const [path, setPath] = useState<string[]>([])
@@ -89,10 +78,31 @@ export function DagSourceWalk() {
   const [cycleStart, setCycleStart] = useState<number | null>(null)
 
   const cfg = PRESETS[preset]
-  const pos = useMemo(
-    () => new Map(cfg.nodes.map((n) => [n.id, n])),
-    [cfg],
-  )
+  const { rects: nodeRects, rectById: nodeRectById } = useMemo(() => {
+    const rects: NodeRect[] = cfg.nodes.map((n) => ({
+      id: n.id,
+      x: n.x - R,
+      y: n.y - R,
+      w: 2 * R,
+      h: 2 * R,
+    }))
+    const byId = new Map(rects.map((r) => [r.id as string, r]))
+    return { rects, rectById: byId }
+  }, [cfg])
+
+  /** Routed directed edge, symmetric trim by R so the arrowhead lands on
+   *  the destination border. */
+  const routedEdge = (fromId: string, toId: string) => {
+    const a = nodeRectById.get(fromId)!
+    const b = nodeRectById.get(toId)!
+    const ax = a.x + a.w / 2
+    const ay = a.y + a.h / 2
+    const bx = b.x + b.w / 2
+    const by = b.y + b.h / 2
+    const geom = routeEdge(a, b, nodeRects)
+    return trimEdgeGeom(geom, ax, ay, R, bx, by, R)
+  }
+
   const preds = useMemo(() => {
     const m = new Map<string, string[]>()
     for (const n of cfg.nodes) m.set(n.id, [])
@@ -240,9 +250,7 @@ export function DagSourceWalk() {
 
           {/* edges */}
           {cfg.edges.map(([u, v], i) => {
-            const A = pos.get(u)!
-            const B = pos.get(v)!
-            const { x1, y1, x2, y2 } = trim(A, B, R)
+            const g = routedEdge(u, v)
             const key = `${u}->${v}`
             let color = '#9b8a8d'
             let mk = 'dsw-grey'
@@ -260,13 +268,22 @@ export function DagSourceWalk() {
               mk = 'dsw-green'
               w = 2.6
             }
-            return (
+            return g.kind === 'line' ? (
               <line
                 key={`e${i}`}
-                x1={x1}
-                y1={y1}
-                x2={x2}
-                y2={y2}
+                x1={g.x1}
+                y1={g.y1}
+                x2={g.x2}
+                y2={g.y2}
+                stroke={color}
+                strokeWidth={w}
+                markerEnd={`url(#${mk})`}
+              />
+            ) : (
+              <path
+                key={`e${i}`}
+                d={g.d}
+                fill="none"
                 stroke={color}
                 strokeWidth={w}
                 markerEnd={`url(#${mk})`}

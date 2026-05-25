@@ -227,7 +227,7 @@ export function PartyDegreeFilter() {
 
       <div className="grid gap-4 p-4 md:grid-cols-[1.5fr_1fr]">
         {/* Graph */}
-        <div className="rounded-xl border border-border bg-white p-3">
+        <div className="rounded-xl border border-border bg-bg-elevated p-3">
           <svg viewBox="0 0 540 380" className="w-full">
             {EDGES.map((e, i) => {
               const isPresent = present.has(e.a) && present.has(e.b)
@@ -312,7 +312,7 @@ export function PartyDegreeFilter() {
 
         {/* Side panel: degree table + constraints */}
         <div className="space-y-3">
-          <div className="rounded-xl border border-border bg-white p-3">
+          <div className="rounded-xl border border-border bg-bg-elevated p-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
               Κατάσταση συνόλου
             </p>
@@ -324,7 +324,7 @@ export function PartyDegreeFilter() {
               <span className="text-fg-subtle">(αρκετοί φίλοι, αρκετοί άγνωστοι)</span>
             </p>
           </div>
-          <div className="rounded-xl border border-border bg-white p-3">
+          <div className="rounded-xl border border-border bg-bg-elevated p-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
               Βαθμοί
             </p>
@@ -386,7 +386,7 @@ export function PartyDegreeFilter() {
             type="button"
             onClick={back}
             disabled={k === 0}
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
           >
             <ChevronLeft size={16} /> πίσω
           </button>
@@ -394,7 +394,7 @@ export function PartyDegreeFilter() {
             type="button"
             onClick={() => setPlaying(!playing)}
             disabled={k >= SCRIPT.events.length - 1}
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
           >
             {playing ? <Pause size={16} /> : <Play size={16} />}
             {playing ? 'παύση' : 'παίξε'}
@@ -403,14 +403,14 @@ export function PartyDegreeFilter() {
             type="button"
             onClick={forward}
             disabled={k >= SCRIPT.events.length - 1}
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
           >
             επόμενο <ChevronRight size={16} />
           </button>
           <button
             type="button"
             onClick={reset}
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2.5 py-1.5 text-sm hover:bg-bg-soft"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-2.5 py-1.5 text-sm hover:bg-bg-soft"
           >
             <RotateCcw size={14} /> reset
           </button>

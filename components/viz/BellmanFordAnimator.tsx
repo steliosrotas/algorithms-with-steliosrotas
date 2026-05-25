@@ -16,6 +16,7 @@
 import { useMemo, useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type BFNode = { id: string; x: number; y: number }
 const NODES: BFNode[] = [
@@ -42,6 +43,14 @@ const DEST = 't'
 const ROUNDS = VERTS.length - 1 // 4
 const INF = Infinity
 const R = 23
+const NODE_RECTS: ReadonlyArray<NodeRect> = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - R,
+  y: n.y - R,
+  w: R * 2,
+  h: R * 2,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r] as const))
 
 const fmt = (d: number) => (d === INF ? '∞' : String(d))
 
@@ -79,16 +88,28 @@ function runBF(): RoundData[] {
   return data
 }
 
-function trim(a: BFNode, b: BFNode, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
+/**
+ * Collision-aware edge routing: returns a straight segment trimmed to the
+ * node borders (the steady-state case for this 5-node directed layout) or a
+ * quadratic Bezier that bends around an unrelated node, also trimmed so the
+ * arrowhead lands on the target border. The `mx, my` fields anchor the weight
+ * label at the centerline midpoint for lines and at the Bezier midpoint
+ * `(P0 + 2Q + P2) / 4` for curves. Locks out the «edge through unrelated
+ * node» class of bug structurally per Phase E.4.6.
+ */
+function routedEdge(a: BFNode, b: BFNode) {
+  const rectA = NODE_RECT_BY_ID.get(a.id)!
+  const rectB = NODE_RECT_BY_ID.get(b.id)!
+  const geom = routeEdge(rectA, rectB, NODE_RECTS)
+  const trimmed = trimEdgeGeom(geom, a.x, a.y, R, b.x, b.y, R)
+  if (trimmed.kind === 'curve') {
+    return {
+      ...trimmed,
+      mx: (a.x + 2 * trimmed.cx + b.x) / 4,
+      my: (a.y + 2 * trimmed.cy + b.y) / 4,
+    }
   }
+  return { ...trimmed, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }
 }
 
 /** "wave" notes — what M[s] means after each round. */
@@ -187,25 +208,36 @@ export function BellmanFordAnimator() {
           {EDGES.map((e, i) => {
             const A = POS.get(e.from)!
             const B = POS.get(e.to)!
-            const { x1, y1, x2, y2 } = trim(A, B, R)
+            const g = routedEdge(A, B)
             const hot = viaEdges.has(`${e.from}->${e.to}`)
             const neg = e.w < 0
-            const mx = (x1 + x2) / 2
-            const my = (y1 + y2) / 2
+            const stroke = hot ? '#9f1239' : '#9b8a8d'
+            const strokeWidth = hot ? 3.4 : 1.8
+            const markerEnd = hot ? 'url(#bf-arr-hi)' : 'url(#bf-arr)'
             return (
               <g key={`e${i}`}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke={hot ? '#9f1239' : '#9b8a8d'}
-                  strokeWidth={hot ? 3.4 : 1.8}
-                  markerEnd={hot ? 'url(#bf-arr-hi)' : 'url(#bf-arr)'}
-                />
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    markerEnd={markerEnd}
+                  />
+                ) : (
+                  <path
+                    d={g.d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    markerEnd={markerEnd}
+                  />
+                )}
                 <rect
-                  x={mx - 12}
-                  y={my - 10}
+                  x={g.mx - 12}
+                  y={g.my - 10}
                   width={24}
                   height={18}
                   rx={3.5}
@@ -213,8 +245,8 @@ export function BellmanFordAnimator() {
                   stroke={neg ? '#dc2626' : hot ? '#9f1239' : '#cdbfc0'}
                 />
                 <text
-                  x={mx}
-                  y={my}
+                  x={g.mx}
+                  y={g.my}
                   textAnchor="middle"
                   dominantBaseline="central"
                   fontSize={11}

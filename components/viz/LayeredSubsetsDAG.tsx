@@ -23,6 +23,7 @@
  */
 
 import { useState } from 'react'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type NodeId = 's' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 't'
 
@@ -110,6 +111,49 @@ const DAG_CROSS_EDGES = EDGES_ALL.filter((e) => LAYER[e.to] - LAYER[e.from] === 
 
 const R = 18
 
+/** Rects for the «Πλήρης γράφος» tab: only the 7 visible vertices {a..g}.
+ *  (s and t sit at (0,0) in NODES_COMPLETE — placeholder, not rendered.) */
+const COMPLETE_VISIBLE: NodeId[] = ['a', 'b', 'c', 'd', 'e', 'f', 'g']
+const COMPLETE_RECTS: NodeRect[] = COMPLETE_VISIBLE.map((id) => {
+  const n = NODES_COMPLETE[id]
+  return { id, x: n.x - R, y: n.y - R, w: 2 * R, h: 2 * R }
+})
+const COMPLETE_RECT_BY_ID = new Map<NodeId, NodeRect>(
+  COMPLETE_RECTS.map((r) => [r.id as NodeId, r]),
+)
+
+/** Rects for the «Στρωματικός DAG» tab: all 9 vertices including s, t. */
+const LAYERED_RECTS: NodeRect[] = (Object.keys(NODES_LAYERED) as NodeId[]).map(
+  (id) => {
+    const n = NODES_LAYERED[id]
+    return { id, x: n.x - R, y: n.y - R, w: 2 * R, h: 2 * R }
+  },
+)
+const LAYERED_RECT_BY_ID = new Map<NodeId, NodeRect>(
+  LAYERED_RECTS.map((r) => [r.id as NodeId, r]),
+)
+
+/** Routed UNDIRECTED edge over the «complete» layout, center-to-center
+ *  (no arrowheads in that tab). */
+function routedCompleteEdge(fromId: NodeId, toId: NodeId) {
+  const a = COMPLETE_RECT_BY_ID.get(fromId)!
+  const b = COMPLETE_RECT_BY_ID.get(toId)!
+  return routeEdge(a, b, COMPLETE_RECTS)
+}
+
+/** Routed DIRECTED edge over the «layered» layout, symmetric trim by R so
+ *  the arrowhead marker lands on the destination border. */
+function routedLayeredEdge(fromId: NodeId, toId: NodeId) {
+  const a = LAYERED_RECT_BY_ID.get(fromId)!
+  const b = LAYERED_RECT_BY_ID.get(toId)!
+  const ax = a.x + a.w / 2
+  const ay = a.y + a.h / 2
+  const bx = b.x + b.w / 2
+  const by = b.y + b.h / 2
+  const geom = routeEdge(a, b, LAYERED_RECTS)
+  return trimEdgeGeom(geom, ax, ay, R, bx, by, R)
+}
+
 /** dist[] computed by topological-order relaxation:
  *  s = 0; a = b = 0 (via s);
  *  c = min(a+4, b+6) = 4 (via a);
@@ -135,18 +179,6 @@ const OPT_PATH: NodeId[] = ['s', 'a', 'd', 'f', 't']
 const OPT_EDGES = new Set(
   OPT_PATH.slice(0, -1).map((u, i) => `${u}-${OPT_PATH[i + 1]}`),
 )
-
-function trim(a: { x: number; y: number }, b: { x: number; y: number }, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
-}
 
 function NodeCircle({
   id,
@@ -244,20 +276,30 @@ export function LayeredSubsetsDAG() {
               xmlns="http://www.w3.org/2000/svg"
             >
               {EDGES_ALL.map((e, i) => {
-                const a = NODES_COMPLETE[e.from]
-                const b = NODES_COMPLETE[e.to]
-                const { x1, y1, x2, y2 } = trim(a, b, R)
+                const g = routedCompleteEdge(e.from, e.to)
                 const allowed = LAYER[e.to] - LAYER[e.from] === 1
-                return (
+                const stroke = allowed ? '#9b8a8d' : '#e8d9da'
+                const strokeWidth = allowed ? 1.6 : 1.2
+                const strokeDasharray = allowed ? '' : '4 3'
+                return g.kind === 'line' ? (
                   <line
                     key={i}
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke={allowed ? '#9b8a8d' : '#e8d9da'}
-                    strokeWidth={allowed ? 1.6 : 1.2}
-                    strokeDasharray={allowed ? '' : '4 3'}
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={strokeDasharray}
+                  />
+                ) : (
+                  <path
+                    key={i}
+                    d={g.d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={strokeDasharray}
                   />
                 )
               })}
@@ -330,22 +372,29 @@ export function LayeredSubsetsDAG() {
               {[...SOURCE_EDGES, ...DAG_CROSS_EDGES, ...SINK_EDGES].map((e, i) => {
                 const a = NODES_LAYERED[e.from]
                 const b = NODES_LAYERED[e.to]
-                const { x1, y1, x2, y2 } = trim(a, b, R)
+                const g = routedLayeredEdge(e.from, e.to)
                 const key = `${e.from}-${e.to}`
                 const onOpt = OPT_EDGES.has(key)
-                const mx = (x1 + x2) / 2
-                const my = (y1 + y2) / 2
+                const mx = g.kind === 'line' ? (a.x + b.x) / 2 : (a.x + b.x + 2 * g.cx) / 4
+                const my = g.kind === 'line' ? (a.y + b.y) / 2 : (a.y + b.y + 2 * g.cy) / 4
+                const stroke = onOpt ? '#9f1239' : '#9b8a8d'
+                const strokeWidth = onOpt ? 3 : 1.6
+                const marker = onOpt ? 'url(#lsd-arr-hi)' : 'url(#lsd-arr)'
                 return (
                   <g key={i}>
-                    <line
-                      x1={x1}
-                      y1={y1}
-                      x2={x2}
-                      y2={y2}
-                      stroke={onOpt ? '#9f1239' : '#9b8a8d'}
-                      strokeWidth={onOpt ? 3 : 1.6}
-                      markerEnd={onOpt ? 'url(#lsd-arr-hi)' : 'url(#lsd-arr)'}
-                    />
+                    {g.kind === 'line' ? (
+                      <line
+                        x1={g.x1}
+                        y1={g.y1}
+                        x2={g.x2}
+                        y2={g.y2}
+                        stroke={stroke}
+                        strokeWidth={strokeWidth}
+                        markerEnd={marker}
+                      />
+                    ) : (
+                      <path d={g.d} fill="none" stroke={stroke} strokeWidth={strokeWidth} markerEnd={marker} />
+                    )}
                     <rect
                       x={mx - 11}
                       y={my - 9}

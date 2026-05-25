@@ -19,9 +19,10 @@
  * Built for L17 problem pt1-th2-a.
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type NCNode = { id: string; x: number; y: number }
 type NCEdge = { from: string; to: string; w: number; curve?: number }
@@ -163,6 +164,32 @@ export function NegativeCycleDetector() {
   const scn = SCENARIOS[tab]
   const verts = scn.nodes.map((n) => n.id)
   const POS = useMemo(() => new Map(scn.nodes.map((n) => [n.id, n])), [scn])
+  const { rects: nodeRects, rectById: nodeRectById } = useMemo(() => {
+    const rects: NodeRect[] = scn.nodes.map((n) => ({
+      id: n.id,
+      x: n.x - R,
+      y: n.y - R,
+      w: 2 * R,
+      h: 2 * R,
+    }))
+    const byId = new Map(rects.map((r) => [r.id as string, r]))
+    return { rects, rectById: byId }
+  }, [scn])
+  /** Routed STRAIGHT edge geometry (only used when `e.curve` is unset).
+   *  Curved edges keep their hand-tuned `curve` value — they are visual
+   *  signals (the wide s→t shortcut, the anti-parallel a↔b cycle pair),
+   *  not collision routing. Mirrors the WhyBFSFailsWeighted carve-out
+   *  precedent from Chunk B2. */
+  const routedStraightEdge = (fromId: string, toId: string) => {
+    const a = nodeRectById.get(fromId)!
+    const b = nodeRectById.get(toId)!
+    const ax = a.x + a.w / 2
+    const ay = a.y + a.h / 2
+    const bx = b.x + b.w / 2
+    const by = b.y + b.h / 2
+    const geom = routeEdge(a, b, nodeRects)
+    return trimEdgeGeom(geom, ax, ay, R, bx, by, R)
+  }
   const data = useMemo(() => runScenario(scn), [scn])
   const rounds = verts.length // n
   const LAST = rounds // step counter goes 0..n; step n = check round
@@ -297,37 +324,67 @@ export function NegativeCycleDetector() {
               ((e.from === 'a' && e.to === 'b') ||
                 (e.from === 'b' && e.to === 'a'))
 
-            let path: string
             let lx: number
             let ly: number
-            if (e.curve) {
-              const c = curvedPath(A, B, R, e.curve)
-              path = c.d
-              lx = c.lx
-              ly = c.ly
-            } else {
-              const { x1, y1, x2, y2 } = trim(A, B, R)
-              path = `M ${x1} ${y1} L ${x2} ${y2}`
-              lx = (x1 + x2) / 2
-              ly = (y1 + y2) / 2
-            }
+            let edgeNode: ReactNode
             const stroke = hot ? '#9f1239' : inUnsafeCycle ? '#dc2626' : '#9b8a8d'
+            const strokeWidth = hot ? 3.4 : inUnsafeCycle ? 2.6 : 1.8
             const marker = hot
               ? 'url(#nc-arr-hi)'
               : inUnsafeCycle
                 ? 'url(#nc-arr-cycle)'
                 : 'url(#nc-arr)'
+            const dasharray = inUnsafeCycle && !hot ? '4 3' : undefined
+
+            if (e.curve) {
+              // Hand-tuned curve — kept by design. The a↔b anti-parallel
+              // pair (curve=18) needs deliberate opposite bulges to not
+              // overlap; the long s→t shortcut (curve=70) needs a wide
+              // swoop over the row to read as a single direct edge.
+              const c = curvedPath(A, B, R, e.curve)
+              lx = c.lx
+              ly = c.ly
+              edgeNode = (
+                <path
+                  d={c.d}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
+                  markerEnd={marker}
+                  strokeDasharray={dasharray}
+                />
+              )
+            } else {
+              const g = routedStraightEdge(e.from, e.to)
+              lx = g.kind === 'line' ? (A.x + B.x) / 2 : (A.x + B.x + 2 * g.cx) / 4
+              ly = g.kind === 'line' ? (A.y + B.y) / 2 : (A.y + B.y + 2 * g.cy) / 4
+              edgeNode =
+                g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    markerEnd={marker}
+                    strokeDasharray={dasharray}
+                  />
+                ) : (
+                  <path
+                    d={g.d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    markerEnd={marker}
+                    strokeDasharray={dasharray}
+                  />
+                )
+            }
 
             return (
               <g key={`e${i}`}>
-                <path
-                  d={path}
-                  fill="none"
-                  stroke={stroke}
-                  strokeWidth={hot ? 3.4 : inUnsafeCycle ? 2.6 : 1.8}
-                  markerEnd={marker}
-                  strokeDasharray={inUnsafeCycle && !hot ? '4 3' : undefined}
-                />
+                {edgeNode}
                 <rect
                   x={lx - 13}
                   y={ly - 10}

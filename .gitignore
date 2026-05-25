@@ -43,8 +43,10 @@ next-env.d.ts.local
 # sprite preview renders (the script is checked in; outputs are throwaway)
 scripts/sprite-preview/tmp/
 
-# raw university exam / frontistirio materials — never commit or publish.
-# Scanned past-exam papers and frontistirio decks. They are transcribed
-# (anonymised) into content/practice/exercises.tsx; the raw files stay
-# local-only. See plans/EXAM_TRANSCRIPTION.md.
-/private_material
+# NOTE 2026-05-24: the privacy architecture has been DROPPED. Raw past-exam
+# and frontistirio source material is now tracked. The bank uses real dates
+# («Ιούνιος 2024 · Θ.3»), and the raw PDFs/images live in `private_material/`
+# for reference (will be committed when the user uploads them to this work
+# tree). See plans/PHASE_E_PLAN.md § E.0 for the bank de-anonymization
+# migration, and plans/EXAM_TRANSCRIPTION.md for the old anonymization rule
+# (now superseded).

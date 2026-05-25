@@ -16,9 +16,8 @@
 import { useMemo, useState } from 'react'
 import { RotateCcw, Scissors, Undo2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { L06_GRAPH, edgeKey } from './graph-types'
+import { L06_GRAPH, edgeKey, routeL06GraphEdge } from './graph-types'
 
-const NODE = new Map(L06_GRAPH.nodes.map((n) => [n.id, n]))
 const EDGE_SET = new Set(L06_GRAPH.edges.map((e) => edgeKey(e.a, e.b)))
 
 type PresetKey = 'simple' | 'nonSimple' | 'notAPath'
@@ -180,8 +179,7 @@ export function PathBuilder() {
             xmlns="http://www.w3.org/2000/svg"
           >
             {L06_GRAPH.edges.map((e, i) => {
-              const A = NODE.get(e.a)!
-              const B = NODE.get(e.b)!
+              const g = routeL06GraphEdge(e.a, e.b)
               const k = edgeKey(e.a, e.b)
               const inCut = cutEdgeSet.has(k)
               const inWalk = walkEdgeSet.has(k)
@@ -194,13 +192,23 @@ export function PathBuilder() {
                   : '#cdc6c5'
               const sw = inCut ? 5 : inWalk ? 4.5 : 2
               const dash = inCut ? '6 4' : undefined
-              return (
+              return g.kind === 'line' ? (
                 <line
                   key={`e${i}`}
-                  x1={A.x}
-                  y1={A.y}
-                  x2={B.x}
-                  y2={B.y}
+                  x1={g.x1}
+                  y1={g.y1}
+                  x2={g.x2}
+                  y2={g.y2}
+                  stroke={stroke}
+                  strokeWidth={sw}
+                  strokeDasharray={dash}
+                  strokeLinecap="round"
+                />
+              ) : (
+                <path
+                  key={`e${i}`}
+                  d={g.d}
+                  fill="none"
                   stroke={stroke}
                   strokeWidth={sw}
                   strokeDasharray={dash}

@@ -15,6 +15,7 @@
 
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 type TN = { id: string; label: string; chi: number; x: number; y: number }
 const P: TN = { id: 'p', label: 'p', chi: 5, x: 215, y: 54 }
@@ -33,6 +34,25 @@ const A_C = 9
 /** B[c] = best independent set of c's subtree WITHOUT c → {g₁,g₂}, value 2. */
 const B_C = 2
 const R = 27
+const NODE_RECTS: ReadonlyArray<NodeRect> = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - R,
+  y: n.y - R,
+  w: R * 2,
+  h: R * 2,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r] as const))
+
+/**
+ * Collision-aware edge routing for this 4-node undirected tree. Center-to-
+ * center (no trimming needed — tree edges have no arrowheads). Locks out the
+ * «edge through unrelated node» class of bug structurally per Phase E.4.6.
+ */
+function routedEdge(a: TN, b: TN) {
+  const rectA = NODE_RECT_BY_ID.get(a.id)!
+  const rectB = NODE_RECT_BY_ID.get(b.id)!
+  return routeEdge(rectA, rectB, NODE_RECTS)
+}
 
 export function WhyTwoTreeValues() {
   const [mode, setMode] = useState<'one' | 'two'>('one')
@@ -147,16 +167,29 @@ export function WhyTwoTreeValues() {
             const isPC =
               (a.id === 'p' && b.id === 'c') || (a.id === 'c' && b.id === 'p')
             const bad = isPC && illegalPC
-            return (
+            const g = routedEdge(a, b)
+            const stroke = bad ? '#dc2626' : '#9b8a8d'
+            const strokeWidth = bad ? 4.5 : 2
+            const strokeDasharray = bad ? '7 5' : undefined
+            return g.kind === 'line' ? (
               <line
                 key={`${a.id}-${b.id}`}
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
-                stroke={bad ? '#dc2626' : '#9b8a8d'}
-                strokeWidth={bad ? 4.5 : 2}
-                strokeDasharray={bad ? '7 5' : undefined}
+                x1={g.x1}
+                y1={g.y1}
+                x2={g.x2}
+                y2={g.y2}
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                strokeDasharray={strokeDasharray}
+              />
+            ) : (
+              <path
+                key={`${a.id}-${b.id}`}
+                d={g.d}
+                fill="none"
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                strokeDasharray={strokeDasharray}
               />
             )
           })}

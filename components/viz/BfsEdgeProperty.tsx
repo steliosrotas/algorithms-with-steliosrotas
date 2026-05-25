@@ -27,7 +27,7 @@
 import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { L06_GRAPH, L06_BFS_TREE, neighbors, sameEdge } from './graph-types'
+import { L06_GRAPH, L06_BFS_TREE, neighbors, sameEdge, routeL06BfsTreeEdge } from './graph-types'
 
 const LEVEL_BAND_Y = [14, 106, 198, 290]
 const LEVEL_BAND_H = 88
@@ -148,8 +148,7 @@ export function BfsEdgeProperty() {
             ))}
             {/* edges */}
             {L06_BFS_TREE.edges.map((e, i) => {
-              const A = L06_BFS_TREE.nodes.find((n) => n.id === e.a)!
-              const B = L06_BFS_TREE.nodes.find((n) => n.id === e.b)!
+              const g = routeL06BfsTreeEdge(e.a, e.b)
               const d = Math.abs((level.get(e.a) ?? 0) - (level.get(e.b) ?? 0))
               let stroke = '#cbb8ba'
               let sw = 1.5
@@ -169,13 +168,23 @@ export function BfsEdgeProperty() {
                 sw = 2.5
                 dash = d === 0 ? '5 3' : undefined
               }
-              return (
+              return g.kind === 'line' ? (
                 <line
                   key={`e-${i}`}
-                  x1={A.x}
-                  y1={A.y}
-                  x2={B.x}
-                  y2={B.y}
+                  x1={g.x1}
+                  y1={g.y1}
+                  x2={g.x2}
+                  y2={g.y2}
+                  stroke={stroke}
+                  strokeWidth={sw}
+                  strokeDasharray={dash}
+                  strokeLinecap="round"
+                />
+              ) : (
+                <path
+                  key={`e-${i}`}
+                  d={g.d}
+                  fill="none"
                   stroke={stroke}
                   strokeWidth={sw}
                   strokeDasharray={dash}
@@ -186,15 +195,23 @@ export function BfsEdgeProperty() {
             {/* hypothetical edge in adv tab */}
             {tab === 'adv' && !isEdge && pair.x !== pair.y && (
               (() => {
-                const A = L06_BFS_TREE.nodes.find((n) => n.id === pair.x)
-                const B = L06_BFS_TREE.nodes.find((n) => n.id === pair.y)
-                if (!A || !B) return null
-                return (
+                const g = routeL06BfsTreeEdge(pair.x, pair.y)
+                return g.kind === 'line' ? (
                   <line
-                    x1={A.x}
-                    y1={A.y}
-                    x2={B.x}
-                    y2={B.y}
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke="#dc2626"
+                    strokeWidth={3}
+                    strokeDasharray="6 4"
+                    strokeLinecap="round"
+                    opacity={0.8}
+                  />
+                ) : (
+                  <path
+                    d={g.d}
+                    fill="none"
                     stroke="#dc2626"
                     strokeWidth={3}
                     strokeDasharray="6 4"

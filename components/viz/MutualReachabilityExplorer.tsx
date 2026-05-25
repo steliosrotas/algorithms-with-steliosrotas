@@ -26,6 +26,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { RotateCcw, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type MNode = { id: number; x: number; y: number }
 
@@ -38,6 +39,14 @@ const NODES: MNode[] = [
 ]
 const POS = new Map(NODES.map((n) => [n.id, n]))
 const R = 22
+const NODE_RECTS: ReadonlyArray<NodeRect> = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - R,
+  y: n.y - R,
+  w: R * 2,
+  h: R * 2,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r] as const))
 
 const CYCLE: [number, number][] = [
   [1, 2],
@@ -93,16 +102,18 @@ function shortestPath(
   return null
 }
 
-function endpoints(a: MNode, b: MNode, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
+/**
+ * Collision-aware edge routing: straight segment trimmed to the node borders
+ * when the centerline clears every other node, or a quadratic Bezier that
+ * bends around the offending node, also trimmed so the arrowhead lands on
+ * the target border. Locks out the «edge through unrelated node» class of
+ * bug structurally per Phase E.4.6.
+ */
+function routedEdge(a: MNode, b: MNode) {
+  const rectA = NODE_RECT_BY_ID.get(a.id)!
+  const rectB = NODE_RECT_BY_ID.get(b.id)!
+  const geom = routeEdge(rectA, rectB, NODE_RECTS)
+  return trimEdgeGeom(geom, a.x, a.y, R + 2, b.x, b.y, R + 2)
 }
 
 function edgeKey(a: number, b: number) {
@@ -285,20 +296,29 @@ export function MutualReachabilityExplorer() {
             {edges.map(([a, b], i) => {
               const A = POS.get(a)!
               const B = POS.get(b)!
-              const ep = endpoints(A, B, R + 2)
+              const g = routedEdge(A, B)
               const key = edgeKey(a, b)
               const ab = abEdges.has(key)
               const ba = baEdges.has(key)
               const stroke = ab && ba ? '#7c3aed' : ab ? '#1d4ed8' : ba ? '#d97706' : '#c9bcbe'
               const sw = ab || ba ? 3 : 1.8
               const marker = ab && ba ? 'mr-arr-ab' : ab ? 'mr-arr-ab' : ba ? 'mr-arr-ba' : 'mr-arr'
-              return (
+              return g.kind === 'line' ? (
                 <line
                   key={i}
-                  x1={ep.x1}
-                  y1={ep.y1}
-                  x2={ep.x2}
-                  y2={ep.y2}
+                  x1={g.x1}
+                  y1={g.y1}
+                  x2={g.x2}
+                  y2={g.y2}
+                  stroke={stroke}
+                  strokeWidth={sw}
+                  markerEnd={`url(#${marker})`}
+                />
+              ) : (
+                <path
+                  key={i}
+                  d={g.d}
+                  fill="none"
                   stroke={stroke}
                   strokeWidth={sw}
                   markerEnd={`url(#${marker})`}

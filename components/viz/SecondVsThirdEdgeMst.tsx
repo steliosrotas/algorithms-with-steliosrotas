@@ -15,6 +15,7 @@
  */
 
 import { useState } from 'react'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type Tab = 'second' | 'third'
 
@@ -32,20 +33,26 @@ const TRIANGLE_EDGES = [
 
 const R = 22
 
-function trim(a: { x: number; y: number }, b: { x: number; y: number }, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
-}
+const NODE_RECTS: NodeRect[] = TRIANGLE_NODES.map((n) => ({
+  id: n.id,
+  x: n.x - R,
+  y: n.y - R,
+  w: 2 * R,
+  h: 2 * R,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r]))
 
-function pos(id: string) {
-  return TRIANGLE_NODES.find((n) => n.id === id)!
+function routedEdge(fromId: string, toId: string) {
+  const aRect = NODE_RECT_BY_ID.get(fromId)!
+  const bRect = NODE_RECT_BY_ID.get(toId)!
+  const ax = aRect.x + aRect.w / 2
+  const ay = aRect.y + aRect.h / 2
+  const bx = bRect.x + bRect.w / 2
+  const by = bRect.y + bRect.h / 2
+  const geom = trimEdgeGeom(routeEdge(aRect, bRect, NODE_RECTS), ax, ay, R, bx, by, R)
+  const mx = geom.kind === 'line' ? (ax + bx) / 2 : (ax + bx + 2 * geom.cx) / 4
+  const my = geom.kind === 'line' ? (ay + by) / 2 : (ay + by + 2 * geom.cy) / 4
+  return { ...geom, mx, my }
 }
 
 type EdgeState = 'unused' | 'accepted' | 'current-accept' | 'current-reject'
@@ -166,11 +173,7 @@ export function SecondVsThirdEdgeMst() {
           xmlns="http://www.w3.org/2000/svg"
         >
           {TRIANGLE_EDGES.map((e) => {
-            const a = pos(e.from)
-            const b = pos(e.to)
-            const { x1, y1, x2, y2 } = trim(a, b, R)
-            const mx = (x1 + x2) / 2
-            const my = (y1 + y2) / 2
+            const g = routedEdge(e.from, e.to)
             const state = edgeStateAt(step, e.id)
             const accepted = state === 'accepted' || state === 'current-accept'
             const rejected = state === 'current-reject'
@@ -178,17 +181,27 @@ export function SecondVsThirdEdgeMst() {
             const sw = accepted ? 3.6 : rejected ? 3.4 : 2
             return (
               <g key={e.id}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke={stroke}
-                  strokeWidth={sw}
-                  strokeDasharray={rejected ? '5 4' : undefined}
-                />
-                <rect x={mx - 11} y={my - 10} width={22} height={20} rx={4} fill="#faf4ee" stroke={stroke} />
-                <text x={mx} y={my} textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={700} fill="#1c1214">
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={sw}
+                    strokeDasharray={rejected ? '5 4' : undefined}
+                  />
+                ) : (
+                  <path
+                    d={g.d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={sw}
+                    strokeDasharray={rejected ? '5 4' : undefined}
+                  />
+                )}
+                <rect x={g.mx - 11} y={g.my - 10} width={22} height={20} rx={4} fill="#faf4ee" stroke={stroke} />
+                <text x={g.mx} y={g.my} textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={700} fill="#1c1214">
                   {e.w}
                 </text>
               </g>

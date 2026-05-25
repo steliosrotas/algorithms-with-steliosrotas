@@ -14,7 +14,8 @@
 
 import { useMemo, useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
-import { layoutForest, type ForestLayout, type Pt } from './uf-layout'
+import { forestNodeRects, layoutForest, type ForestLayout } from './uf-layout'
+import { routeEdge, trimEdgeGeom } from './edge-routing'
 
 const ELEMS = ['1', '2', '3', '4', '5']
 /** union(a, b): a is a fresh element, b lives in the growing tree */
@@ -95,21 +96,6 @@ function buildSteps(): RaceStep[] {
   return steps
 }
 
-/** trim a child→parent segment to the two circle borders */
-function seg(from: Pt, to: Pt) {
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-  const len = Math.hypot(dx, dy) || 1
-  const ux = dx / len
-  const uy = dy / len
-  return {
-    x1: from.x + ux * NODE_R,
-    y1: from.y + uy * NODE_R,
-    x2: to.x - ux * (NODE_R + 6),
-    y2: to.y - uy * (NODE_R + 6),
-  }
-}
-
 /** deepest leaf → root path, for the worst-case Find */
 function deepestPath(
   parent: Record<string, string>,
@@ -153,25 +139,52 @@ function Forest({
   const { parent, layout, newNode } = side
   const ox = CX - layout.width / 2
   const worst = showWorst ? deepestPath(parent, layout) : new Set<string>()
-  const at = (id: string): Pt => {
-    const p = layout.pos.get(id)!
-    return { x: p.x + ox, y: p.y + oy }
+  const { rects: nodeRects, rectById: nodeRectById } = forestNodeRects(
+    layout,
+    NODE_R,
+    ox,
+    oy,
+  )
+  const routedEdge = (childId: string, parentId: string) => {
+    const cR = nodeRectById.get(childId)!
+    const pR = nodeRectById.get(parentId)!
+    const cx = cR.x + cR.w / 2
+    const cy = cR.y + cR.h / 2
+    const px = pR.x + pR.w / 2
+    const py = pR.y + pR.h / 2
+    const geom = routeEdge(cR, pR, nodeRects)
+    return trimEdgeGeom(geom, cx, cy, NODE_R, px, py, NODE_R + 6)
+  }
+  const at = (id: string) => {
+    const r = nodeRectById.get(id)!
+    return { x: r.x + r.w / 2, y: r.y + r.h / 2 }
   }
   return (
     <g>
       {ELEMS.filter((e) => parent[e] !== e).map((c) => {
-        const g = seg(at(c), at(parent[c]))
+        const g = routedEdge(c, parent[c])
         const isNew = c === newNode
         const onWorst = worst.has(c) && worst.has(parent[c])
-        return (
+        const stroke = onWorst ? '#9f1239' : isNew ? '#d97706' : '#6b5d5f'
+        const strokeWidth = onWorst || isNew ? 3.2 : 1.9
+        return g.kind === 'line' ? (
           <line
             key={`e${c}`}
             x1={g.x1}
             y1={g.y1}
             x2={g.x2}
             y2={g.y2}
-            stroke={onWorst ? '#9f1239' : isNew ? '#d97706' : '#6b5d5f'}
-            strokeWidth={onWorst || isNew ? 3.2 : 1.9}
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+            markerEnd="url(#ubs-arrow)"
+          />
+        ) : (
+          <path
+            key={`e${c}`}
+            d={g.d}
+            fill="none"
+            stroke={stroke}
+            strokeWidth={strokeWidth}
             markerEnd="url(#ubs-arrow)"
           />
         )

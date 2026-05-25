@@ -9,6 +9,8 @@
  * tidy-tree placement and stay visually consistent.
  */
 
+import type { NodeRect } from './edge-routing'
+
 export type Pt = { x: number; y: number }
 
 export type ForestLayout = {
@@ -104,4 +106,36 @@ export function layoutForest(
     height: padY + maxDepth * levelGap + padY,
     maxDepth,
   }
+}
+
+/**
+ * Build collision-aware `NodeRect[]` from a `ForestLayout` for use with
+ * `routeEdge()` (Phase E.4.6 edge routing). Each circular node becomes its
+ * bounding square `2·nodeR` wide centred at `pos`. Optional `(ox, oy)`
+ * shifts the rects into an absolute SVG coordinate frame (used by
+ * `UnionBySizeRace`, which stacks two forests on the same SVG).
+ *
+ * Returns both the array (for `allNodes` arg) and a Map keyed by element id
+ * (for endpoint lookup in a per-file `routedEdge` helper).
+ */
+export function forestNodeRects(
+  layout: ForestLayout,
+  nodeR: number,
+  ox: number = 0,
+  oy: number = 0,
+): { rects: NodeRect[]; rectById: Map<string, NodeRect> } {
+  const rects: NodeRect[] = []
+  const rectById = new Map<string, NodeRect>()
+  for (const [id, p] of layout.pos.entries()) {
+    const r: NodeRect = {
+      id,
+      x: p.x + ox - nodeR,
+      y: p.y + oy - nodeR,
+      w: 2 * nodeR,
+      h: 2 * nodeR,
+    }
+    rects.push(r)
+    rectById.set(id, r)
+  }
+  return { rects, rectById }
 }

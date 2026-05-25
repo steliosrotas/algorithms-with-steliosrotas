@@ -14,7 +14,8 @@
 
 import { useMemo, useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
-import { layoutForest, type Pt } from './uf-layout'
+import { forestNodeRects, layoutForest } from './uf-layout'
+import { routeEdge, trimEdgeGeom } from './edge-routing'
 
 const ELEMS = ['1', '2', '3', '4', '5', '6', '7']
 const NODE_R = 17
@@ -139,21 +140,6 @@ function runOps(): UFStep[] {
   return steps
 }
 
-/** trim a child→parent segment to the two circle borders */
-function seg(from: Pt, to: Pt) {
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-  const len = Math.hypot(dx, dy) || 1
-  const ux = dx / len
-  const uy = dy / len
-  return {
-    x1: from.x + ux * NODE_R,
-    y1: from.y + uy * NODE_R,
-    x2: to.x - ux * (NODE_R + 7),
-    y2: to.y - uy * (NODE_R + 7),
-  }
-}
-
 export function UnionFindForest() {
   const steps = useMemo(runOps, [])
   const last = steps.length - 1
@@ -175,6 +161,25 @@ export function UnionFindForest() {
     () => layoutForest(new Map(Object.entries(cur.parent))),
     [cur],
   )
+
+  const { rects: nodeRects, rectById: nodeRectById } = useMemo(
+    () => forestNodeRects(layout, NODE_R),
+    [layout],
+  )
+
+  /** routed child→parent geometry, trimmed asymmetrically so the arrowhead
+   *  marker has room on the parent side (NODE_R + 7) but the line starts
+   *  exactly on the child's circle border (NODE_R). */
+  const routedEdge = (childId: string, parentId: string) => {
+    const cR = nodeRectById.get(childId)!
+    const pR = nodeRectById.get(parentId)!
+    const cx = cR.x + cR.w / 2
+    const cy = cR.y + cR.h / 2
+    const px = pR.x + pR.w / 2
+    const py = pR.y + pR.h / 2
+    const geom = routeEdge(cR, pR, nodeRects)
+    return trimEdgeGeom(geom, cx, cy, NODE_R, px, py, NODE_R + 7)
+  }
 
   const rootOf = (x: string): string => {
     let r = x
@@ -238,20 +243,32 @@ export function UnionFindForest() {
             {/* edges: each non-root points at its parent */}
             {ELEMS.filter((e) => cur.parent[e] !== e).map((c) => {
               const p = cur.parent[c]
-              const g = seg(layout.pos.get(c)!, layout.pos.get(p)!)
+              const g = routedEdge(c, p)
               const onPath = pathEdgeChild.has(c)
               const isNew = cur.newChild === c
               const hot = onPath || isNew
-              return (
+              const stroke = hot ? '#9f1239' : '#6b5d5f'
+              const strokeWidth = hot ? 3.4 : 1.9
+              const markerEnd = hot ? 'url(#uff-arrow-hot)' : 'url(#uff-arrow)'
+              return g.kind === 'line' ? (
                 <line
                   key={`e${c}`}
                   x1={g.x1}
                   y1={g.y1}
                   x2={g.x2}
                   y2={g.y2}
-                  stroke={hot ? '#9f1239' : '#6b5d5f'}
-                  strokeWidth={hot ? 3.4 : 1.9}
-                  markerEnd={hot ? 'url(#uff-arrow-hot)' : 'url(#uff-arrow)'}
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
+                  markerEnd={markerEnd}
+                />
+              ) : (
+                <path
+                  key={`e${c}`}
+                  d={g.d}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
+                  markerEnd={markerEnd}
                 />
               )
             })}

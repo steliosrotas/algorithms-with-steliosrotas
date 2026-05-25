@@ -16,6 +16,7 @@
  */
 
 import { useState } from 'react'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type NodeId = 's' | 'v1' | 'v2' | 't'
 
@@ -26,6 +27,28 @@ const NODES: Record<NodeId, { x: number; y: number }> = {
   t: { x: 410, y: 130 },
 }
 const R = 22
+
+const NODE_RECTS: NodeRect[] = (Object.keys(NODES) as NodeId[]).map((id) => ({
+  id,
+  x: NODES[id].x - R,
+  y: NODES[id].y - R,
+  w: 2 * R,
+  h: 2 * R,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r]))
+
+function routedEdge(aId: NodeId, bId: NodeId) {
+  const aRect = NODE_RECT_BY_ID.get(aId)!
+  const bRect = NODE_RECT_BY_ID.get(bId)!
+  const ax = aRect.x + aRect.w / 2
+  const ay = aRect.y + aRect.h / 2
+  const bx = bRect.x + bRect.w / 2
+  const by = bRect.y + bRect.h / 2
+  const geom = trimEdgeGeom(routeEdge(aRect, bRect, NODE_RECTS), ax, ay, R, bx, by, R)
+  const mx = geom.kind === 'line' ? (ax + bx) / 2 : (ax + bx + 2 * geom.cx) / 4
+  const my = geom.kind === 'line' ? (ay + by) / 2 : (ay + by + 2 * geom.cy) / 4
+  return { ...geom, mx, my }
+}
 
 type EdgeKey = 'sv1' | 'sv2' | 'v1v2' | 'v1t' | 'v2t'
 
@@ -78,18 +101,6 @@ const PATHS: Path[] = [
 ]
 
 const WINNER_ID = 'p3'
-
-function trim(a: { x: number; y: number }, b: { x: number; y: number }, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
-}
 
 export function ReliabilityLogTransform() {
   const [mode, setMode] = useState<'P' | 'W'>('P')
@@ -171,27 +182,36 @@ export function ReliabilityLogTransform() {
           </defs>
 
           {EDGES.map((e) => {
-            const a = NODES[e.from]
-            const b = NODES[e.to]
-            const { x1, y1, x2, y2 } = trim(a, b, R)
+            const g = routedEdge(e.from, e.to)
             const active = activeEdges.has(e.key)
-            const mx = (x1 + x2) / 2
-            const my = (y1 + y2) / 2
             const label = mode === 'P' ? e.pLabel : e.w.toString()
+            const stroke = active ? '#9f1239' : '#bdb0b2'
+            const strokeWidth = active ? 3.6 : 2
+            const markerEnd = active ? 'url(#rlt-arr-hi)' : 'url(#rlt-arr)'
             return (
               <g key={e.key}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke={active ? '#9f1239' : '#bdb0b2'}
-                  strokeWidth={active ? 3.6 : 2}
-                  markerEnd={active ? 'url(#rlt-arr-hi)' : 'url(#rlt-arr)'}
-                />
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    markerEnd={markerEnd}
+                  />
+                ) : (
+                  <path
+                    d={g.d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    markerEnd={markerEnd}
+                  />
+                )}
                 <rect
-                  x={mx - 22}
-                  y={my - 11}
+                  x={g.mx - 22}
+                  y={g.my - 11}
                   width={44}
                   height={21}
                   rx={4}
@@ -199,8 +219,8 @@ export function ReliabilityLogTransform() {
                   stroke={active ? '#9f1239' : '#cdbfc0'}
                 />
                 <text
-                  x={mx}
-                  y={my}
+                  x={g.mx}
+                  y={g.my}
                   textAnchor="middle"
                   dominantBaseline="central"
                   fontSize={12}

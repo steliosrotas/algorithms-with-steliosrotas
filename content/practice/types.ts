@@ -157,13 +157,6 @@ export type Exercise = {
   topic: Topic
   origin: Origin
   source?: ExamSource
-  /**
-   * Anonymised paper label for transcribed past-exam / frontistirio problems,
-   * e.g. "Παλαιό Θέμα #3". When set, the UI shows this instead of the dated
-   * `source` badge — the real exam date is deliberately not displayed, and the
-   * original PDF/image is deleted from the repo. See `plans/EXAM_TRANSCRIPTION.md`.
-   */
-  paperLabel?: string
   /** Problem label as printed on the original, e.g. "ΘΕΜΑ 1", "Άσκηση 2β". */
   problemNumber?: string
   /** Weight on the exam, e.g. 25 for "25%". May be undefined if the original doesn't state it. */

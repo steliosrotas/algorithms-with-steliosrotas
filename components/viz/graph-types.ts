@@ -8,6 +8,8 @@
  * and the prose that describes it.
  */
 
+import { routeEdge, type EdgeGeom, type NodeRect } from './edge-routing'
+
 export type GraphNodeId = number
 
 export type GraphNode = {
@@ -110,4 +112,67 @@ export function edgeKey(a: GraphNodeId, b: GraphNodeId): string {
 /** True when edge `e` is the edge between `a` and `b` (in either direction). */
 export function sameEdge(e: GraphEdge, a: GraphNodeId, b: GraphNodeId): boolean {
   return edgeKey(e.a, e.b) === edgeKey(a, b)
+}
+
+/**
+ * Conservative collision-rect radius for the L06_GRAPH consumers. Picked one
+ * pixel above the largest visible node radius across the family
+ * (`GraphRepresentations` and `DfsTreeBuilder` use r=23; the rest use r=22),
+ * so the routed edge stays clear of every consumer's circles regardless of
+ * the radius the caller draws with. The 4 px collision padding inside
+ * `routeEdge` is applied on top.
+ */
+const L06_GRAPH_RECT_R = 24
+const L06_BFS_TREE_RECT_R = 23
+
+function buildRects(
+  nodes: ReadonlyArray<{ id: GraphNodeId; x: number; y: number }>,
+  r: number,
+): NodeRect[] {
+  return nodes.map((n) => ({
+    id: n.id,
+    x: n.x - r,
+    y: n.y - r,
+    w: 2 * r,
+    h: 2 * r,
+  }))
+}
+
+const L06_GRAPH_RECTS = buildRects(L06_GRAPH.nodes, L06_GRAPH_RECT_R)
+const L06_BFS_TREE_RECTS = buildRects(L06_BFS_TREE.nodes, L06_BFS_TREE_RECT_R)
+const L06_GRAPH_RECT_BY_ID = new Map(L06_GRAPH_RECTS.map((r) => [r.id, r]))
+const L06_BFS_TREE_RECT_BY_ID = new Map(L06_BFS_TREE_RECTS.map((r) => [r.id, r]))
+
+/**
+ * Collision-aware edge geometry for any pair of vertices on the canonical
+ * L06_GRAPH layout. Returns a straight `kind: 'line'` segment (centre-to-
+ * centre — byte-identical to the existing direct `<line>` rendering) when
+ * the segment clears every non-endpoint node, or a quadratic Bezier
+ * `kind: 'curve'` that bulges around the closest in-the-way node otherwise.
+ *
+ * Consumers branch on `g.kind === 'line' ? <line …> : <path d={g.d} … />`
+ * — styling, stroke, animation are unchanged. See `edge-routing.ts` for the
+ * routing algorithm and `plans/E_EDGE_ROUTING_AUDIT.md` for the wider Phase
+ * E.4.6 retrofit.
+ */
+export function routeL06GraphEdge(a: GraphNodeId, b: GraphNodeId): EdgeGeom {
+  const ra = L06_GRAPH_RECT_BY_ID.get(a)
+  const rb = L06_GRAPH_RECT_BY_ID.get(b)
+  if (!ra || !rb) {
+    throw new Error(`routeL06GraphEdge: unknown vertex id ${ra ? b : a}`)
+  }
+  return routeEdge(ra, rb, L06_GRAPH_RECTS)
+}
+
+/**
+ * Collision-aware edge geometry on the BFS-levels layout of the same graph
+ * (`L06_BFS_TREE`). Same line-vs-curve contract as `routeL06GraphEdge`.
+ */
+export function routeL06BfsTreeEdge(a: GraphNodeId, b: GraphNodeId): EdgeGeom {
+  const ra = L06_BFS_TREE_RECT_BY_ID.get(a)
+  const rb = L06_BFS_TREE_RECT_BY_ID.get(b)
+  if (!ra || !rb) {
+    throw new Error(`routeL06BfsTreeEdge: unknown vertex id ${ra ? b : a}`)
+  }
+  return routeEdge(ra, rb, L06_BFS_TREE_RECTS)
 }

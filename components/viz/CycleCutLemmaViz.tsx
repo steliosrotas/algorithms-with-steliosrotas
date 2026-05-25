@@ -24,7 +24,7 @@ import {
   MST_NODE_R,
   MST_VIEW,
   edgeId,
-  trimmedEdge,
+  routeMstEdge,
 } from './mst-graph'
 
 type CyclePreset = {
@@ -240,14 +240,24 @@ export function CycleCutLemmaViz() {
           {MST_EDGES.filter((e) => cycleEdgeSet.has(e.id)).map((e) => {
             const A = MST_POS.get(e.a)!
             const B = MST_POS.get(e.b)!
-            const g = trimmedEdge(A, B)
-            return (
+            const g = routeMstEdge(A, B)
+            return g.kind === 'line' ? (
               <line
                 key={`glow-${e.id}`}
                 x1={g.x1}
                 y1={g.y1}
                 x2={g.x2}
                 y2={g.y2}
+                stroke="#fb923c"
+                strokeWidth={13}
+                strokeOpacity={0.28}
+                strokeLinecap="round"
+              />
+            ) : (
+              <path
+                key={`glow-${e.id}`}
+                d={g.d}
+                fill="none"
                 stroke="#fb923c"
                 strokeWidth={13}
                 strokeOpacity={0.28}
@@ -260,7 +270,7 @@ export function CycleCutLemmaViz() {
           {MST_EDGES.map((e) => {
             const A = MST_POS.get(e.a)!
             const B = MST_POS.get(e.b)!
-            const g = trimmedEdge(A, B)
+            const g = routeMstEdge(A, B)
             const idxInCycle = cycleEdges.indexOf(e.id)
             const isOnCycle = idxInCycle >= 0
             const isCrossing = isOnCycle && crossingFlags[idxInCycle]
@@ -282,15 +292,25 @@ export function CycleCutLemmaViz() {
             }
             return (
               <g key={e.id}>
-                <line
-                  x1={g.x1}
-                  y1={g.y1}
-                  x2={g.x2}
-                  y2={g.y2}
-                  stroke={stroke}
-                  strokeWidth={width}
-                  strokeLinecap="round"
-                />
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={width}
+                    strokeLinecap="round"
+                  />
+                ) : (
+                  <path
+                    d={g.d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={width}
+                    strokeLinecap="round"
+                  />
+                )}
                 {isOnCycle && (
                   <>
                     <rect

@@ -189,7 +189,32 @@ export function TopoOrderBuilder() {
             </marker>
           </defs>
 
-          {/* edges as arcs */}
+          {/*
+            Edges as arcs — DESIGN-ARC carve-out, deliberately bypassing
+            `routeEdge()` (Chunk B6, mirrors the WhyBFSFailsWeighted
+            precedent from Chunk B2 and the DfsTreeBuilder back-edge arcs
+            from Chunk B3). The arc IS the visual identity here: every
+            edge bulges UP above the single row of slot-nodes, with the
+            arc's apex height proportional to slot span (`26 + span * 30`).
+            That bulge encodes direction visually — forward edges curve
+            up-right (green), backward edges curve up-left (red), with
+            the marker on the arc's far end making "this points right" or
+            "this points left" readable at a glance.
+
+            All nodes sit at y = SLOT_Y on a single row, so a straight
+            segment between any two slots is collinear with every node
+            in between — passing `routeEdge` the slot row would either
+            return a straight line at y = topY (above the row, no
+            collisions if we anchored at topY) which destroys the
+            direction visual entirely, OR return a curve with smaller
+            and direction-inconsistent bulge if we anchored at slot
+            centers (since every non-endpoint slot sits ON the segment,
+            the collider-mass tie-break degenerates).
+
+            Keeping the hand-tuned arc preserves the pedagogy. Adoption
+            rule from `plans/E_EDGE_ROUTING_AUDIT.md` § Adoption rules
+            does not apply when the arc itself is the teaching surface.
+          */}
           {cfg.edges.map(([u, v], idx) => {
             const p = slotOf.get(u)!
             const q = slotOf.get(v)!

@@ -12,9 +12,10 @@
  * Built for L08.
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 type BNode = { id: string; x: number; level: number }
 type BGraph = {
@@ -25,6 +26,7 @@ type BGraph = {
 }
 
 const ROW_Y = (lvl: number) => 58 + lvl * 84
+const NODE_R = 20
 
 const GRAPHS: Record<'bipartite' | 'odd', BGraph> = {
   bipartite: {
@@ -69,10 +71,31 @@ export function BipartiteChecker() {
 
   const g = GRAPHS[which]
   const levelById = new Map(g.nodes.map((n) => [n.id, n.level]))
-  const posById = new Map(g.nodes.map((n) => [n.id, n]))
   const numLevels = Math.max(...g.nodes.map((n) => n.level)) + 1
   const verdictStep = numLevels + 1
   const atVerdict = step === verdictStep
+
+  // Collision-aware edge routing: built per-graph because the bipartite and
+  // odd layouts have different node sets. Steady state is straight lines
+  // (the level-banded layout is collision-free); routeEdge falls back to a
+  // Bezier if a future layout edit places a node on the centerline. Locks
+  // out the «edge through unrelated node» class of bug structurally per
+  // Phase E.4.6.
+  const nodeRects = useMemo<NodeRect[]>(
+    () =>
+      g.nodes.map((n) => ({
+        id: n.id,
+        x: n.x - NODE_R,
+        y: ROW_Y(n.level) - NODE_R,
+        w: NODE_R * 2,
+        h: NODE_R * 2,
+      })),
+    [g],
+  )
+  const rectById = useMemo(
+    () => new Map(nodeRects.map((r) => [r.id, r] as const)),
+    [nodeRects],
+  )
 
   /** a node's level is coloured once step has reached it */
   const coloured = (lvl: number) => step >= lvl + 1
@@ -165,19 +188,31 @@ export function BipartiteChecker() {
 
           {/* edges */}
           {g.edges.map(([a, b], i) => {
-            const A = posById.get(a)!
-            const B = posById.get(b)!
+            const rectA = rectById.get(a)!
+            const rectB = rectById.get(b)!
+            const geom = routeEdge(rectA, rectB, nodeRects)
             const bad = atVerdict && which === 'odd' && sameLevel(a, b)
             const cyc = atVerdict && which === 'odd' && inCycleEdge(a, b)
-            return (
+            const stroke = bad ? '#dc2626' : cyc ? '#f59e0b' : '#9b8a8d'
+            const strokeWidth = bad ? 5 : cyc ? 4 : 2
+            return geom.kind === 'line' ? (
               <line
                 key={`e${i}`}
-                x1={A.x}
-                y1={ROW_Y(A.level)}
-                x2={B.x}
-                y2={ROW_Y(B.level)}
-                stroke={bad ? '#dc2626' : cyc ? '#f59e0b' : '#9b8a8d'}
-                strokeWidth={bad ? 5 : cyc ? 4 : 2}
+                x1={geom.x1}
+                y1={geom.y1}
+                x2={geom.x2}
+                y2={geom.y2}
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+              />
+            ) : (
+              <path
+                key={`e${i}`}
+                d={geom.d}
+                fill="none"
+                stroke={stroke}
+                strokeWidth={strokeWidth}
                 strokeLinecap="round"
               />
             )

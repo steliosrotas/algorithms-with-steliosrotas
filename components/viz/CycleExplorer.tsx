@@ -21,9 +21,8 @@
 import { useMemo, useState } from 'react'
 import { RotateCcw, Undo2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { L06_GRAPH, edgeKey } from './graph-types'
+import { L06_GRAPH, edgeKey, routeL06GraphEdge } from './graph-types'
 
-const NODE = new Map(L06_GRAPH.nodes.map((n) => [n.id, n]))
 const EDGE_SET = new Set(L06_GRAPH.edges.map((e) => edgeKey(e.a, e.b)))
 
 type PresetKey = 'valid' | 'tooShort' | 'revisit'
@@ -171,18 +170,28 @@ export function CycleExplorer() {
             xmlns="http://www.w3.org/2000/svg"
           >
             {L06_GRAPH.edges.map((e, i) => {
-              const A = NODE.get(e.a)!
-              const B = NODE.get(e.b)!
+              const g = routeL06GraphEdge(e.a, e.b)
               const on = walkEdgeSet.has(edgeKey(e.a, e.b))
-              return (
+              const stroke = on ? (verdict.tone === 'good' ? '#059669' : '#9f1239') : '#cdc6c5'
+              const sw = on ? 4.5 : 2
+              return g.kind === 'line' ? (
                 <line
                   key={`e${i}`}
-                  x1={A.x}
-                  y1={A.y}
-                  x2={B.x}
-                  y2={B.y}
-                  stroke={on ? (verdict.tone === 'good' ? '#059669' : '#9f1239') : '#cdc6c5'}
-                  strokeWidth={on ? 4.5 : 2}
+                  x1={g.x1}
+                  y1={g.y1}
+                  x2={g.x2}
+                  y2={g.y2}
+                  stroke={stroke}
+                  strokeWidth={sw}
+                  strokeLinecap="round"
+                />
+              ) : (
+                <path
+                  key={`e${i}`}
+                  d={g.d}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={sw}
                   strokeLinecap="round"
                 />
               )

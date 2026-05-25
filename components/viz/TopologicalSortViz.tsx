@@ -11,6 +11,7 @@
 
 import { useMemo, useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type TNode = { id: string; x: number; y: number }
 type TEdge = { from: string; to: string }
@@ -34,7 +35,28 @@ const EDGES: TEdge[] = [
   { from: 'E', to: 'F' },
   { from: 'F', to: 'G' },
 ]
-const POS = new Map(NODES.map((n) => [n.id, n]))
+const NODE_R = 22
+const NODE_RECTS: NodeRect[] = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - NODE_R,
+  y: n.y - NODE_R,
+  w: 2 * NODE_R,
+  h: 2 * NODE_R,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id as string, r]))
+
+/** Routed directed edge, trimmed symmetrically by NODE_R so the arrowhead
+ *  marker lands on the destination's circle border. */
+function routedEdge(fromId: string, toId: string) {
+  const a = NODE_RECT_BY_ID.get(fromId)!
+  const b = NODE_RECT_BY_ID.get(toId)!
+  const ax = a.x + a.w / 2
+  const ay = a.y + a.h / 2
+  const bx = b.x + b.w / 2
+  const by = b.y + b.h / 2
+  const geom = routeEdge(a, b, NODE_RECTS)
+  return trimEdgeGeom(geom, ax, ay, NODE_R, bx, by, NODE_R)
+}
 
 type TStep = {
   removed: string
@@ -69,18 +91,6 @@ function runKahn(): TStep[] {
     steps.push({ removed: pick, counts: { ...count }, order: [...order], newSources })
   }
   return steps
-}
-
-function trim(a: TNode, b: TNode, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
 }
 
 const INDEG0: Record<string, number> = (() => {
@@ -151,20 +161,29 @@ export function TopologicalSortViz() {
 
           {/* edges */}
           {EDGES.map((e, i) => {
-            const A = POS.get(e.from)!
-            const B = POS.get(e.to)!
-            const { x1, y1, x2, y2 } = trim(A, B, 22)
+            const g = routedEdge(e.from, e.to)
             const gone = removed.has(e.from)
-            return (
+            const strokeOpacity = gone ? 0.25 : 1
+            return g.kind === 'line' ? (
               <line
                 key={`e${i}`}
-                x1={x1}
-                y1={y1}
-                x2={x2}
-                y2={y2}
+                x1={g.x1}
+                y1={g.y1}
+                x2={g.x2}
+                y2={g.y2}
                 stroke="#9b8a8d"
                 strokeWidth={1.8}
-                strokeOpacity={gone ? 0.25 : 1}
+                strokeOpacity={strokeOpacity}
+                markerEnd="url(#ts-arr)"
+              />
+            ) : (
+              <path
+                key={`e${i}`}
+                d={g.d}
+                fill="none"
+                stroke="#9b8a8d"
+                strokeWidth={1.8}
+                strokeOpacity={strokeOpacity}
                 markerEnd="url(#ts-arr)"
               />
             )

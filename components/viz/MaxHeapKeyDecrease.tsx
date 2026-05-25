@@ -28,6 +28,7 @@
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 type Pos = 'P_root' | 'P_L' | 'P_R' | 'P_RL' | 'P_RR' | 'P_RRL' | 'P_RRR'
 
@@ -49,6 +50,31 @@ const EDGES: [Pos, Pos][] = [
   ['P_RR', 'P_RRL'],
   ['P_RR', 'P_RRR'],
 ]
+
+const NODE_R = 22
+
+const NODE_RECTS: NodeRect[] = []
+const NODE_RECT_BY_ID = new Map<Pos, NodeRect>()
+for (const pos of Object.keys(COORDS) as Pos[]) {
+  const c = COORDS[pos]
+  const r: NodeRect = {
+    id: pos,
+    x: c.x - NODE_R,
+    y: c.y - NODE_R,
+    w: 2 * NODE_R,
+    h: 2 * NODE_R,
+  }
+  NODE_RECTS.push(r)
+  NODE_RECT_BY_ID.set(pos, r)
+}
+
+/** Routed parent→child edge, center-to-center (heap tree edges have no
+ *  arrowhead, so no asymmetric trim). */
+function routedEdge(from: Pos, to: Pos) {
+  const a = NODE_RECT_BY_ID.get(from)!
+  const b = NODE_RECT_BY_ID.get(to)!
+  return routeEdge(a, b, NODE_RECTS)
+}
 
 const LEFT_CHILD: Partial<Record<Pos, Pos>> = {
   P_root: 'P_L',
@@ -267,21 +293,32 @@ export function MaxHeapKeyDecrease() {
         >
           {/* edges */}
           {EDGES.map(([from, to], k) => {
-            const a = COORDS[from]
-            const b = COORDS[to]
             const swapped =
               step.swap &&
               ((step.swap[0] === from && step.swap[1] === to) ||
                 (step.swap[0] === to && step.swap[1] === from))
-            return (
+            const stroke = swapped ? '#15803d' : '#c9bcbe'
+            const strokeWidth = swapped ? 3.5 : 1.8
+            const g = routedEdge(from, to)
+            return g.kind === 'line' ? (
               <line
                 key={k}
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
-                stroke={swapped ? '#15803d' : '#c9bcbe'}
-                strokeWidth={swapped ? 3.5 : 1.8}
+                x1={g.x1}
+                y1={g.y1}
+                x2={g.x2}
+                y2={g.y2}
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+                strokeDasharray={swapped ? '0' : undefined}
+              />
+            ) : (
+              <path
+                key={k}
+                d={g.d}
+                fill="none"
+                stroke={stroke}
+                strokeWidth={strokeWidth}
                 strokeLinecap="round"
                 strokeDasharray={swapped ? '0' : undefined}
               />

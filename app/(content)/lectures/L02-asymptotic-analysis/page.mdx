@@ -145,6 +145,15 @@ $$
 **Μάθημα.** Όταν λέμε «$T(n) = O(g(n))$» δεν δηλώνουμε *την ακριβή τάξη*· δηλώνουμε *ένα άνω φράγμα*. Το $O(n^3)$ παραπάνω είναι αληθές αλλά αδιάφορο. Στο εξεταστικό ζητάμε πάντα **το πιο σφιχτό $O$**, που συνήθως ταυτίζεται με το $\Theta$.
 </Example>
 
+<ExamProblem
+  relatedExerciseId="pt4-th1-q5"
+  pattern={
+    <>
+      <strong>Αν η εκφώνηση δίνει συγκεκριμένη συνάρτηση (άθροισμα, πολυώνυμο, ρητή έκφραση) και σου ζητάει «δείξε ότι ανήκει στο <InlineMath>{'\\Theta(g(n))'}</InlineMath>»</strong> — ίδια μηχανική με το παράδειγμα παραπάνω: φράξε άνω από κάποιο <InlineMath>{'c_2 \\cdot g'}</InlineMath> και κάτω από κάποιο <InlineMath>{'c_1 \\cdot g'}</InlineMath> για κάθε <InlineMath>{'n \\ge n_0'}</InlineMath>. Στις αριθμητικές αθροίσεις αρκεί ο κλειστός τύπος <InlineMath>{'1+2+\\cdots+n = n(n+1)/2'}</InlineMath>· ή χωρίς τύπο, οι μισοί όροι από <InlineMath>{'n/2'}</InlineMath> και πάνω δίνουν <InlineMath>{'\\Omega(n^2)'}</InlineMath> και κάθε όρος <InlineMath>{'\\le n'}</InlineMath> δίνει <InlineMath>{'O(n^2)'}</InlineMath>.
+    </>
+  }
+/>
+
 ## Η ιεραρχία πολυπλοκοτήτων — από σταθερό έως παραγοντικό
 
 Οι κλάσεις που θα συναντάμε ξανά και ξανά, σε αυξανόμενο ρυθμό αύξησης:
@@ -274,6 +283,15 @@ $$
 
 Σχεδόν πάντα το αποτέλεσμα είναι και $\Theta$, όχι μόνο $O$ — δηλαδή σφιχτό φράγμα και από τις δύο μεριές.
 </ThinkingPattern>
+
+<ExamProblem
+  relatedExerciseId="pt2-th1-q1"
+  pattern={
+    <>
+      <strong>Αν δεις άθροισμα <InlineMath>{'\\sum f(i)'}</InlineMath> στη μία πλευρά και πολυώνυμο × λογάριθμο στην άλλη</strong> — εφάρμοσε ακριβώς τα τρία βήματα παραπάνω: (1) <em>κλείσε</em> το άθροισμα σε αναγνωρίσιμη μορφή (<InlineMath>{'\\sum_{i=1}^{n} i = \\Theta(n^2)'}</InlineMath>, <InlineMath>{'\\sum_{i=1}^{n} i^2 = \\Theta(n^3)'}</InlineMath>, <InlineMath>{'\\sum_{k=1}^{n} 1/k = \\Theta(\\log n)'}</InlineMath> — μάθε τα τρία απ' έξω), (2) πέτα σταθερές, (3) σύγκρινε στην ιεραρχία. Στο πρόσφατο θέμα, <InlineMath>{'\\sum i^2 = \\Theta(n^3)'}</InlineMath> έναντι <InlineMath>{'n^2 \\log n'}</InlineMath> δίνει αμέσως <InlineMath>{'\\omega'}</InlineMath> (αυστηρά πιο γρήγορη) — και επομένως και <InlineMath>{'\\Omega'}</InlineMath>.
+    </>
+  }
+/>
 
 ## Πρακτικές ασκήσεις
 
@@ -464,6 +482,15 @@ $$\log^c n \prec n^\epsilon \prec n^c \prec a^n \prec n!$$
 
 για οποιεσδήποτε σταθερές $c > 0, \epsilon > 0, a > 1$. Αυτή είναι η «**βασική ιεραρχία**» που χρησιμοποιούμε διαρκώς.
 </Callout>
+
+<ExamProblem
+  relatedExerciseId="pt1-th1-q2"
+  pattern={
+    <>
+      <strong>Αν εμφανιστούν «τρομακτικές» μορφές όπως <InlineMath>{'a^{\\log_a n}'}</InlineMath>, <InlineMath>{'n^{\\log n}'}</InlineMath>, <InlineMath>{'\\log(\\sqrt{x})'}</InlineMath></strong> — πρώτη κίνηση πάντα: <em>ξεμπλέκεις τις ταυτότητες πριν συγκρίνεις</em> (<InlineMath>{'2^{\\log_2 n} = n'}</InlineMath>, <InlineMath>{'\\log(\\sqrt{x}) = \\tfrac{1}{2}\\log x'}</InlineMath>, <InlineMath>{'\\log_a n = \\log_2 n / \\log_2 a'}</InlineMath>). Συχνά αυτό λύνει το μισό γρίφο. Μετά τοποθετείς τις απλοποιημένες μορφές στην ιεραρχία παραπάνω — μια συνάρτηση με εκθέτη που μεγαλώνει μαζί με το <InlineMath>{'n'}</InlineMath> (π.χ. <InlineMath>{'n^{\\log_2 n}'}</InlineMath>) είναι <strong>υπερπολυωνυμική</strong>: κάθεται ανάμεσα σε <InlineMath>{'n^c'}</InlineMath> και <InlineMath>{'a^n'}</InlineMath>.
+    </>
+  }
+/>
 
 ## Η έννοια του βέλτιστου αλγορίθμου
 

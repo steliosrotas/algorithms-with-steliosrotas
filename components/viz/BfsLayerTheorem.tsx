@@ -26,7 +26,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Play, Pause, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { L06_BFS_TREE, L06_GRAPH, neighbors } from './graph-types'
+import { L06_BFS_TREE, L06_GRAPH, neighbors, routeL06BfsTreeEdge } from './graph-types'
 
 /** distance + parent for shortest path, from start vertex 1. */
 function bfsDistances() {
@@ -165,15 +165,23 @@ export function BfsLayerTheorem() {
             ))}
             {/* edges */}
             {L06_BFS_TREE.edges.map((e, i) => {
-              const A = L06_BFS_TREE.nodes.find((n) => n.id === e.a)!
-              const B = L06_BFS_TREE.nodes.find((n) => n.id === e.b)!
-              return (
+              const g = routeL06BfsTreeEdge(e.a, e.b)
+              return g.kind === 'line' ? (
                 <line
                   key={`e-${i}`}
-                  x1={A.x}
-                  y1={A.y}
-                  x2={B.x}
-                  y2={B.y}
+                  x1={g.x1}
+                  y1={g.y1}
+                  x2={g.x2}
+                  y2={g.y2}
+                  stroke="#9b8a8d"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                />
+              ) : (
+                <path
+                  key={`e-${i}`}
+                  d={g.d}
+                  fill="none"
                   stroke="#9b8a8d"
                   strokeWidth={1.5}
                   strokeLinecap="round"

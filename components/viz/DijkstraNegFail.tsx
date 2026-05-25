@@ -15,6 +15,7 @@
 
 import { useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type DNode = { id: string; x: number; y: number }
 const S: DNode = { id: 's', x: 72, y: 160 }
@@ -23,20 +24,39 @@ const U: DNode = { id: 'u', x: 268, y: 246 }
 const NODES = [S, T, U]
 const R = 25
 const INF = Infinity
+const NODE_RECTS: ReadonlyArray<NodeRect> = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - R,
+  y: n.y - R,
+  w: R * 2,
+  h: R * 2,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r] as const))
 
 const fmt = (d: number) => (d === INF ? '∞' : String(d))
 
-/** Shorten an edge so the arrowhead lands on the node border. */
-function trim(a: DNode, b: DNode, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
+/**
+ * Collision-aware edge routing: returns a straight segment trimmed to the
+ * node borders (the steady-state case for this 3-node directed layout) or a
+ * quadratic Bezier that bends around an unrelated node, also trimmed so the
+ * arrowhead lands on the target border. The `mx, my` fields anchor the weight
+ * label at the centerline midpoint for lines and at the Bezier midpoint
+ * `(P0 + 2Q + P2) / 4` for curves. Locks out the «edge through unrelated
+ * node» class of bug structurally per Phase E.4.6.
+ */
+function routedEdge(a: DNode, b: DNode) {
+  const rectA = NODE_RECT_BY_ID.get(a.id)!
+  const rectB = NODE_RECT_BY_ID.get(b.id)!
+  const geom = routeEdge(rectA, rectB, NODE_RECTS)
+  const trimmed = trimEdgeGeom(geom, a.x, a.y, R, b.x, b.y, R)
+  if (trimmed.kind === 'curve') {
+    return {
+      ...trimmed,
+      mx: (a.x + 2 * trimmed.cx + b.x) / 4,
+      my: (a.y + 2 * trimmed.cy + b.y) / 4,
+    }
   }
+  return { ...trimmed, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }
 }
 
 /** A tiny padlock drawn at (x, y) — the node-is-finalized marker. */
@@ -152,29 +172,38 @@ export function DijkstraNegFail() {
               { a: T, b: U, w: -5, id: 'tu' },
             ] as const
           ).map(({ a, b, w, id }) => {
-            const { x1, y1, x2, y2 } = trim(a, b, R)
+            const g = routedEdge(a, b)
             const failEdge = id === 'tu' && showFail
             const litByS =
               step >= 1 && (id === 'st' || id === 'su') && a.id === 's'
             const hot = failEdge || (step === 1 && litByS)
-            const mx = (x1 + x2) / 2
-            const my = (y1 + y2) / 2
+            const stroke = failEdge ? '#dc2626' : hot ? '#9f1239' : '#9b8a8d'
+            const strokeWidth = hot ? 3.4 : 2
+            const markerEnd = failEdge ? 'url(#dnf-arr-red)' : 'url(#dnf-arr)'
             return (
               <g key={id}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke={failEdge ? '#dc2626' : hot ? '#9f1239' : '#9b8a8d'}
-                  strokeWidth={hot ? 3.4 : 2}
-                  markerEnd={
-                    failEdge ? 'url(#dnf-arr-red)' : 'url(#dnf-arr)'
-                  }
-                />
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    markerEnd={markerEnd}
+                  />
+                ) : (
+                  <path
+                    d={g.d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    markerEnd={markerEnd}
+                  />
+                )}
                 <rect
-                  x={mx - 13}
-                  y={my - 11}
+                  x={g.mx - 13}
+                  y={g.my - 11}
                   width={26}
                   height={20}
                   rx={4}
@@ -182,8 +211,8 @@ export function DijkstraNegFail() {
                   stroke={failEdge ? '#dc2626' : hot ? '#9f1239' : '#cdbfc0'}
                 />
                 <text
-                  x={mx}
-                  y={my}
+                  x={g.mx}
+                  y={g.my}
                   textAnchor="middle"
                   dominantBaseline="central"
                   fontSize={12}

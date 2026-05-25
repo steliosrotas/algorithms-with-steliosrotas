@@ -13,6 +13,7 @@
 
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type WNode = { id: string; x: number; y: number }
 const NODES: WNode[] = [
@@ -23,6 +24,14 @@ const NODES: WNode[] = [
 ]
 const POS = new Map(NODES.map((n) => [n.id, n]))
 const R = 22
+const NODE_RECTS: ReadonlyArray<NodeRect> = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - R,
+  y: n.y - R,
+  w: R * 2,
+  h: R * 2,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r] as const))
 
 const PATH: { a: string; b: string; w: number }[] = [
   { a: 's', b: 'a', w: 10 },
@@ -30,16 +39,20 @@ const PATH: { a: string; b: string; w: number }[] = [
   { a: 'b', b: 't', w: 10 },
 ]
 
-function trim(a: WNode, b: WNode, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
+/**
+ * Collision-aware edge routing for the 3 detour edges (s→a, a→b, b→t).
+ * Steady-state straight line trimmed to node borders; falls back to a
+ * Bezier if a future layout edit places a node on the centerline. The
+ * separate s–t arc is hand-crafted by design (a deliberate over-the-top
+ * curve to visually separate «1 ακμή, βάρος 100» from the 3-edge detour
+ * running along the bottom) and intentionally bypasses routeEdge.
+ * Phase E.4.6.
+ */
+function routedEdge(a: WNode, b: WNode) {
+  const rectA = NODE_RECT_BY_ID.get(a.id)!
+  const rectB = NODE_RECT_BY_ID.get(b.id)!
+  const geom = routeEdge(rectA, rectB, NODE_RECTS)
+  return trimEdgeGeom(geom, a.x, a.y, R + 1, b.x, b.y, R + 1)
 }
 
 function EdgeLabel({
@@ -137,16 +150,27 @@ export function WhyBFSFailsWeighted() {
           {PATH.map((e, i) => {
             const A = POS.get(e.a)!
             const B = POS.get(e.b)!
-            const { x1, y1, x2, y2 } = trim(A, B, R + 1)
-            return (
+            const g = routedEdge(A, B)
+            const stroke = !byEdges ? '#16a34a' : '#bdb0b2'
+            const strokeWidth = !byEdges ? 5 : 2.4
+            return g.kind === 'line' ? (
               <line
                 key={i}
-                x1={x1}
-                y1={y1}
-                x2={x2}
-                y2={y2}
-                stroke={!byEdges ? '#16a34a' : '#bdb0b2'}
-                strokeWidth={!byEdges ? 5 : 2.4}
+                x1={g.x1}
+                y1={g.y1}
+                x2={g.x2}
+                y2={g.y2}
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+              />
+            ) : (
+              <path
+                key={i}
+                d={g.d}
+                fill="none"
+                stroke={stroke}
+                strokeWidth={strokeWidth}
                 strokeLinecap="round"
               />
             )

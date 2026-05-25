@@ -26,6 +26,11 @@ const FUNCTIONS: GrowthFn[] = [
 ]
 
 const PLOT = { x0: 64, x1: 686, yTop: 44, yBot: 348 }
+// Number of polyline samples per curve. At low slider values (nMax = 5)
+// sampling only at integer n leaves the chart with ≤ 5 segments per curve
+// — visibly corner-y for n², n·log n, 2ⁿ. 200 samples puts each segment
+// below ~1 px regardless of the slider position.
+const SAMPLES = 200
 
 function fmt(v: number): string {
   if (v >= 1e7) return v.toExponential(1).replace('e+', '·10^')
@@ -51,11 +56,31 @@ export function BigOPlayground() {
 
   const active = FUNCTIONS.filter((fn) => enabled[fn.id])
   const lines = active.map((fn) => {
+    // Stop the polyline at the first point that overshoots the y-cap: any
+    // further samples would all clamp to PLOT.yTop and draw a misleading
+    // horizontal trail along the top of the chart, hiding the fact that the
+    // curve is exploding upward. We mark the overflow x so we can drop an
+    // upward arrow there instead.
     const pts: string[] = []
-    for (let n = 1; n <= nMax; n++) {
-      pts.push(`${xFor(n).toFixed(1)},${yFor(fn.f(n)).toFixed(1)}`)
+    let overflowX: number | null = null
+    for (let i = 0; i < SAMPLES; i++) {
+      const t = i / (SAMPLES - 1)
+      const n = 1 + t * (nMax - 1)
+      const v = fn.f(n)
+      const x = xFor(n)
+      pts.push(`${x.toFixed(1)},${yFor(v).toFixed(1)}`)
+      if (v > yCap) {
+        overflowX = x
+        break
+      }
     }
-    return { fn, points: pts.join(' '), endVal: fn.f(nMax), endY: yFor(fn.f(nMax)) }
+    return {
+      fn,
+      points: pts.join(' '),
+      endVal: fn.f(nMax),
+      endY: yFor(fn.f(nMax)),
+      overflowX,
+    }
   })
 
   const yTicks = [0, 0.25, 0.5, 0.75, 1]
@@ -144,9 +169,22 @@ export function BigOPlayground() {
         </text>
 
         {/* function curves */}
-        {lines.map(({ fn, points, endY }) => (
+        {lines.map(({ fn, points, endY, overflowX }) => (
           <g key={fn.id}>
             <polyline points={points} fill="none" stroke={fn.color} strokeWidth={2.5} strokeLinejoin="round" />
+            {overflowX !== null && (
+              <text
+                x={overflowX}
+                y={PLOT.yTop - 5}
+                textAnchor="middle"
+                fontSize={15}
+                fontWeight={700}
+                fill={fn.color}
+                aria-label="συνεχίζει εκτός ορίων προς τα πάνω"
+              >
+                ↑
+              </text>
+            )}
             <text
               x={PLOT.x1 + 6}
               y={Math.max(PLOT.yTop + 4, Math.min(endY + 3, PLOT.yBot))}

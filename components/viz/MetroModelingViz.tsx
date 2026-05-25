@@ -24,6 +24,7 @@
 
 import { useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 type Station = {
   id: string
@@ -133,6 +134,47 @@ function bfs(
   return null
 }
 
+// --- collision rects for the station-map graph (visible r=11 + 1 px) ---
+const STATION_RECT_R = 12
+const STATION_RECTS: NodeRect[] = STATIONS.map((s) => ({
+  id: s.id,
+  x: s.x - STATION_RECT_R,
+  y: s.y - STATION_RECT_R,
+  w: 2 * STATION_RECT_R,
+  h: 2 * STATION_RECT_R,
+}))
+const STATION_RECT_BY_ID = new Map(STATION_RECTS.map((r) => [r.id, r]))
+function routeStationEdge(a: string, b: string) {
+  return routeEdge(
+    STATION_RECT_BY_ID.get(a)!,
+    STATION_RECT_BY_ID.get(b)!,
+    STATION_RECTS,
+  )
+}
+
+// --- collision rects for the mini line-graph (visible r=18 + 1 px) ---
+const LINE_GRAPH_POS: Record<string, [number, number]> = {
+  R: [60, 30],
+  B: [200, 30],
+  G: [130, 90],
+}
+const LINE_GRAPH_RECT_R = 19
+const LINE_GRAPH_RECTS: NodeRect[] = Object.entries(LINE_GRAPH_POS).map(([id, [x, y]]) => ({
+  id,
+  x: x - LINE_GRAPH_RECT_R,
+  y: y - LINE_GRAPH_RECT_R,
+  w: 2 * LINE_GRAPH_RECT_R,
+  h: 2 * LINE_GRAPH_RECT_R,
+}))
+const LINE_GRAPH_RECT_BY_ID = new Map(LINE_GRAPH_RECTS.map((r) => [r.id, r]))
+function routeLineGraphEdge(a: string, b: string) {
+  return routeEdge(
+    LINE_GRAPH_RECT_BY_ID.get(a)!,
+    LINE_GRAPH_RECT_BY_ID.get(b)!,
+    LINE_GRAPH_RECTS,
+  )
+}
+
 type Tab = 'stations' | 'lines'
 
 export function MetroModelingViz() {
@@ -234,20 +276,32 @@ export function MetroModelingViz() {
           >
             {/* the LINES drawn as track strokes */}
             {STATION_EDGES.map((e, i) => {
-              const A = ST_OF.get(e.a)!
-              const B = ST_OF.get(e.b)!
+              const g = routeStationEdge(e.a, e.b)
               const k = e.a < e.b ? `${e.a}|${e.b}` : `${e.b}|${e.a}`
               const used = tab === 'stations' && stationEdgesUsed.has(k)
-              return (
+              const stroke = LINE_COLOR[e.line]
+              const sw = used ? 7 : 4
+              const op = used ? 1 : 0.45
+              return g.kind === 'line' ? (
                 <line
                   key={`se${i}`}
-                  x1={A.x}
-                  y1={A.y}
-                  x2={B.x}
-                  y2={B.y}
-                  stroke={LINE_COLOR[e.line]}
-                  strokeWidth={used ? 7 : 4}
-                  strokeOpacity={used ? 1 : 0.45}
+                  x1={g.x1}
+                  y1={g.y1}
+                  x2={g.x2}
+                  y2={g.y2}
+                  stroke={stroke}
+                  strokeWidth={sw}
+                  strokeOpacity={op}
+                  strokeLinecap="round"
+                />
+              ) : (
+                <path
+                  key={`se${i}`}
+                  d={g.d}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={sw}
+                  strokeOpacity={op}
                   strokeLinecap="round"
                 />
               )
@@ -373,30 +427,47 @@ export function MetroModelingViz() {
                 </div>
                 <svg viewBox="0 0 280 110" className="mx-auto block h-auto w-full">
                   {LINE_EDGES.map((e, i) => {
-                    const POS_L: Record<string, [number, number]> = {
-                      R: [60, 30],
-                      B: [200, 30],
-                      G: [130, 90],
-                    }
+                    const g = routeLineGraphEdge(e.a, e.b)
                     const used =
                       linePathSet.has(e.a) &&
                       linePathSet.has(e.b) &&
                       linePath &&
                       ((linePath.indexOf(e.a) + 1 === linePath.indexOf(e.b)) ||
                         (linePath.indexOf(e.b) + 1 === linePath.indexOf(e.a)))
+                    const stroke = used ? '#b45309' : '#9b8a8d'
+                    const sw = used ? 4.5 : 2.5
+                    // Label anchor: midpoint for line, Bezier midpoint
+                    // (M + Q) / 2 for curve.
+                    const ax = LINE_GRAPH_POS[e.a][0]
+                    const ay = LINE_GRAPH_POS[e.a][1]
+                    const bx = LINE_GRAPH_POS[e.b][0]
+                    const by = LINE_GRAPH_POS[e.b][1]
+                    const lx =
+                      g.kind === 'line' ? (ax + bx) / 2 : (ax + bx + 2 * g.cx) / 4
+                    const ly =
+                      g.kind === 'line' ? (ay + by) / 2 : (ay + by + 2 * g.cy) / 4
                     return (
                       <g key={`le${i}`}>
-                        <line
-                          x1={POS_L[e.a][0]}
-                          y1={POS_L[e.a][1]}
-                          x2={POS_L[e.b][0]}
-                          y2={POS_L[e.b][1]}
-                          stroke={used ? '#b45309' : '#9b8a8d'}
-                          strokeWidth={used ? 4.5 : 2.5}
-                        />
+                        {g.kind === 'line' ? (
+                          <line
+                            x1={g.x1}
+                            y1={g.y1}
+                            x2={g.x2}
+                            y2={g.y2}
+                            stroke={stroke}
+                            strokeWidth={sw}
+                          />
+                        ) : (
+                          <path
+                            d={g.d}
+                            fill="none"
+                            stroke={stroke}
+                            strokeWidth={sw}
+                          />
+                        )}
                         <text
-                          x={(POS_L[e.a][0] + POS_L[e.b][0]) / 2}
-                          y={(POS_L[e.a][1] + POS_L[e.b][1]) / 2 + 4}
+                          x={lx}
+                          y={ly + 4}
                           textAnchor="middle"
                           fontSize={9}
                           fontWeight={600}
@@ -408,14 +479,9 @@ export function MetroModelingViz() {
                     )
                   })}
                   {(['R', 'B', 'G'] as const).map((l) => {
-                    const P: Record<string, [number, number]> = {
-                      R: [60, 30],
-                      B: [200, 30],
-                      G: [130, 90],
-                    }
                     const here = linePathSet.has(l)
                     return (
-                      <g key={l} transform={`translate(${P[l][0]} ${P[l][1]})`}>
+                      <g key={l} transform={`translate(${LINE_GRAPH_POS[l][0]} ${LINE_GRAPH_POS[l][1]})`}>
                         <circle
                           r={18}
                           fill={LINE_COLOR[l]}

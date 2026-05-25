@@ -28,6 +28,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Pause, Play, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
+
+const NODE_W = 64
+const NODE_H = 28
 
 // We encode a state as a 4-bit mask: B=1, C=2, G=4, W=8. The bit being SET
 // means the character is on the FAR bank.
@@ -191,6 +195,23 @@ export function RiverCrossingStateGraph() {
     return s
   }, [mode, k])
 
+  const NODE_RECTS: NodeRect[] = useMemo(
+    () =>
+      SAFE_STATES.map((s) => ({
+        id: s,
+        x: POS[s].x - NODE_W / 2,
+        y: POS[s].y - NODE_H / 2,
+        w: NODE_W,
+        h: NODE_H,
+      })),
+    [],
+  )
+
+  const EDGE_GEOM = useMemo(() => {
+    const byId = new Map<StateId, NodeRect>(NODE_RECTS.map((r) => [r.id as StateId, r]))
+    return EDGES.map((e) => routeEdge(byId.get(e.a)!, byId.get(e.b)!, NODE_RECTS))
+  }, [NODE_RECTS])
+
   return (
     <div className="not-prose my-6 overflow-hidden rounded-2xl border border-border bg-bg-soft/30">
       <div className="border-b border-border bg-bg-soft/50 px-4 py-3">
@@ -236,26 +257,40 @@ export function RiverCrossingStateGraph() {
 
       <div className="grid gap-4 p-4 lg:grid-cols-[1.4fr_1fr]">
         {/* Graph */}
-        <div className="rounded-xl border border-border bg-white p-3">
+        <div className="rounded-xl border border-border bg-bg-elevated p-3">
           <svg viewBox="0 0 680 360" className="w-full">
             {EDGES.map((e, i) => {
-              const pa = POS[e.a]
-              const pb = POS[e.b]
               const hi =
                 activeEdge &&
                 ((activeEdge.a === e.a && activeEdge.b === e.b) ||
                   (activeEdge.a === e.b && activeEdge.b === e.a))
               const isVisited = visited.has(e.a) && visited.has(e.b)
+              const stroke = hi ? '#dc2626' : isVisited ? '#0ea5a2' : '#cbb3b8'
+              const strokeWidth = hi ? 4 : isVisited ? 2.4 : 1.4
+              const opacity = hi || isVisited ? 1 : 0.7
+              const geom = EDGE_GEOM[i]
+              if (geom.kind === 'curve') {
+                return (
+                  <path
+                    key={i}
+                    d={geom.d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    opacity={opacity}
+                  />
+                )
+              }
               return (
                 <line
                   key={i}
-                  x1={pa.x}
-                  y1={pa.y}
-                  x2={pb.x}
-                  y2={pb.y}
-                  stroke={hi ? '#dc2626' : isVisited ? '#0ea5a2' : '#cbb3b8'}
-                  strokeWidth={hi ? 4 : isVisited ? 2.4 : 1.4}
-                  opacity={hi || isVisited ? 1 : 0.7}
+                  x1={geom.x1}
+                  y1={geom.y1}
+                  x2={geom.x2}
+                  y2={geom.y2}
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
+                  opacity={opacity}
                 />
               )
             })}
@@ -348,7 +383,7 @@ export function RiverCrossingStateGraph() {
         {/* Side panel */}
         <div className="space-y-3">
           {mode === 'solve' && (
-            <div className="rounded-xl border border-border bg-white p-3">
+            <div className="rounded-xl border border-border bg-bg-elevated p-3">
               <p className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
                 Λύση BFS — 7 βήματα
               </p>
@@ -375,7 +410,7 @@ export function RiverCrossingStateGraph() {
               </ol>
             </div>
           )}
-          <div className="rounded-xl border border-border bg-white p-3">
+          <div className="rounded-xl border border-border bg-bg-elevated p-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
               6 καταστάσεις αποκλείονται (απαγορευμένες)
             </p>
@@ -408,7 +443,7 @@ export function RiverCrossingStateGraph() {
               type="button"
               onClick={stepBack}
               disabled={k === 0}
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
             >
               <ChevronLeft size={16} /> πίσω
             </button>
@@ -416,7 +451,7 @@ export function RiverCrossingStateGraph() {
               type="button"
               onClick={() => setPlaying(!playing)}
               disabled={k >= SOLUTION.length}
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
             >
               {playing ? <Pause size={16} /> : <Play size={16} />}
               {playing ? 'παύση' : 'παίξε'}
@@ -425,14 +460,14 @@ export function RiverCrossingStateGraph() {
               type="button"
               onClick={stepForward}
               disabled={k >= SOLUTION.length}
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
             >
               επόμενο <ChevronRight size={16} />
             </button>
             <button
               type="button"
               onClick={reset}
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2.5 py-1.5 text-sm hover:bg-bg-soft"
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-2.5 py-1.5 text-sm hover:bg-bg-soft"
             >
               <RotateCcw size={14} /> reset
             </button>
@@ -482,7 +517,7 @@ function BankSide({
           members.map((x) => (
             <span
               key={x}
-              className="rounded bg-white px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-border"
+              className="rounded bg-bg-elevated px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-border"
               title={LABEL_EL[x]}
             >
               {NAMES[x]}{' '}

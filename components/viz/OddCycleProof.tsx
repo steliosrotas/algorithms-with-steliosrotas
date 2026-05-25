@@ -18,6 +18,7 @@
 import { useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 type PNode = { id: string; x: number; level: number }
 
@@ -34,7 +35,29 @@ const NODES: PNode[] = [
   { id: 'x', x: 80, level: 3 },
   { id: 'y', x: 170, level: 3 },
 ]
-const POS = new Map(NODES.map((n) => [n.id, n]))
+const NODE_R = 20
+const NODE_RECTS: ReadonlyArray<NodeRect> = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - NODE_R,
+  y: ROW_Y(n.level) - NODE_R,
+  w: NODE_R * 2,
+  h: NODE_R * 2,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r] as const))
+
+/**
+ * Collision-aware edge routing on the level-banded BFS tree layout: returns
+ * a straight segment (the steady-state case for every tree edge here) or a
+ * quadratic Bezier that bends around an unrelated node. Center-to-center,
+ * no border trim (this viz draws lines from centre to centre). Locks out
+ * the «edge through unrelated node» class of bug structurally per Phase
+ * E.4.6.
+ */
+function routedEdge(aId: string, bId: string) {
+  const rectA = NODE_RECT_BY_ID.get(aId)!
+  const rectB = NODE_RECT_BY_ID.get(bId)!
+  return routeEdge(rectA, rectB, NODE_RECTS)
+}
 
 type PEdge = { id: string; a: string; b: string }
 const TREE: PEdge[] = [
@@ -162,34 +185,61 @@ export function OddCycleProof() {
 
           {/* tree edges */}
           {TREE.map((e) => {
-            const A = POS.get(e.a)!
-            const B = POS.get(e.b)!
+            const g = routedEdge(e.a, e.b)
             const on = cyc.has(e.id)
-            return (
+            const stroke = on ? '#d97706' : '#bdb0b2'
+            const strokeWidth = on ? 4.5 : 2
+            return g.kind === 'line' ? (
               <line
                 key={e.id}
-                x1={A.x}
-                y1={ROW_Y(A.level)}
-                x2={B.x}
-                y2={ROW_Y(B.level)}
-                stroke={on ? '#d97706' : '#bdb0b2'}
-                strokeWidth={on ? 4.5 : 2}
+                x1={g.x1}
+                y1={g.y1}
+                x2={g.x2}
+                y2={g.y2}
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+              />
+            ) : (
+              <path
+                key={e.id}
+                d={g.d}
+                fill="none"
+                stroke={stroke}
+                strokeWidth={strokeWidth}
                 strokeLinecap="round"
               />
             )
           })}
 
           {/* the same-level "bad" edge */}
-          <line
-            x1={POS.get('x')!.x}
-            y1={ROW_Y(3)}
-            x2={POS.get('y')!.x}
-            y2={ROW_Y(3)}
-            stroke={step >= 5 ? '#d97706' : '#dc2626'}
-            strokeWidth={step >= 5 ? 4.5 : 3.5}
-            strokeLinecap="round"
-            strokeDasharray={step >= 5 ? undefined : '6 4'}
-          />
+          {(() => {
+            const g = routedEdge('x', 'y')
+            const stroke = step >= 5 ? '#d97706' : '#dc2626'
+            const strokeWidth = step >= 5 ? 4.5 : 3.5
+            const dash = step >= 5 ? undefined : '6 4'
+            return g.kind === 'line' ? (
+              <line
+                x1={g.x1}
+                y1={g.y1}
+                x2={g.x2}
+                y2={g.y2}
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+                strokeDasharray={dash}
+              />
+            ) : (
+              <path
+                d={g.d}
+                fill="none"
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+                strokeDasharray={dash}
+              />
+            )
+          })()}
 
           {/* nodes */}
           {NODES.map((n) => {

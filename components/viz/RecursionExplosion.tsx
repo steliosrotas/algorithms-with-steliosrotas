@@ -23,6 +23,7 @@
 import { useMemo, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 type Mode = 'naive' | 'memo'
 type Kind = 'compute' | 'hit' | 'base'
@@ -195,11 +196,36 @@ export function RecursionExplosion({ instance = 'fibonacci' }: Props) {
     () => layoutTree(mode === 'naive' ? buildNaive(n, cfg) : buildMemo(n, cfg)),
     [n, mode, cfg],
   )
-  const posByUid = useMemo(() => {
-    const m = new Map<string, Positioned>()
-    for (const nd of nodes) m.set(nd.uid, nd)
-    return m
+
+  /**
+   * Collision-aware edge routing — rects live in the rendered (post-MARGIN)
+   * coordinate frame so `routeEdge` operates on the same geometry the SVG
+   * actually draws. Layout depends on (n, mode, cfg) transitively via `nodes`.
+   */
+  const { rects: nodeRects, rectById: nodeRectById } = useMemo(() => {
+    const rects: NodeRect[] = []
+    const byId = new Map<string, NodeRect>()
+    for (const nd of nodes) {
+      const r: NodeRect = {
+        id: nd.uid,
+        x: nd.x + MARGIN - R,
+        y: nd.y + MARGIN - R,
+        w: 2 * R,
+        h: 2 * R,
+      }
+      rects.push(r)
+      byId.set(nd.uid, r)
+    }
+    return { rects, rectById: byId }
   }, [nodes])
+
+  /** Routed parent→child edge geometry, center-to-center (recursion-tree
+   *  edges have no arrowheads). */
+  const routedEdge = (fromUid: string, toUid: string) => {
+    const aR = nodeRectById.get(fromUid)!
+    const bR = nodeRectById.get(toUid)!
+    return routeEdge(aR, bR, nodeRects)
+  }
 
   const naive = naiveCalls(n, cfg)
   const memo = memoCalls(n, cfg)
@@ -309,15 +335,22 @@ export function RecursionExplosion({ instance = 'fibonacci' }: Props) {
         >
           {/* edges */}
           {edges.map((e) => {
-            const a = posByUid.get(e.from)!
-            const b = posByUid.get(e.to)!
-            return (
+            const g = routedEdge(e.from, e.to)
+            return g.kind === 'line' ? (
               <line
                 key={`${e.from}-${e.to}`}
-                x1={a.x + MARGIN}
-                y1={a.y + MARGIN}
-                x2={b.x + MARGIN}
-                y2={b.y + MARGIN}
+                x1={g.x1}
+                y1={g.y1}
+                x2={g.x2}
+                y2={g.y2}
+                stroke="#b6a6a8"
+                strokeWidth={1.6}
+              />
+            ) : (
+              <path
+                key={`${e.from}-${e.to}`}
+                d={g.d}
+                fill="none"
                 stroke="#b6a6a8"
                 strokeWidth={1.6}
               />

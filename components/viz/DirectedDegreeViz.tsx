@@ -21,6 +21,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Play, Pause, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type DNode = { id: number; x: number; y: number }
 const NODES: DNode[] = [
@@ -33,6 +34,14 @@ const NODES: DNode[] = [
 ]
 const POS = new Map(NODES.map((n) => [n.id, n]))
 const R = 24
+const NODE_RECTS: ReadonlyArray<NodeRect> = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - R,
+  y: n.y - R,
+  w: R * 2,
+  h: R * 2,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r] as const))
 
 /** Eight directed edges: a 6-cycle plus two chords. */
 const EDGES: { from: number; to: number }[] = [
@@ -49,16 +58,28 @@ const M = EDGES.length // 8
 
 type Mode = 'sweep' | 'vertex'
 
-function endpoints(a: DNode, b: DNode, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
+/**
+ * Collision-aware edge routing: returns a straight segment trimmed to the
+ * node borders (the steady-state case for this 6-node directed layout) or a
+ * quadratic Bezier that bends around an unrelated node, also trimmed so the
+ * arrowhead lands on the target border. The `mx, my` fields anchor the «next
+ * edge» label at the centerline midpoint for lines and at the Bezier midpoint
+ * `(P0 + 2Q + P2) / 4` for curves. Locks out the «edge through unrelated
+ * node» class of bug structurally per Phase E.4.6.
+ */
+function routedEdge(a: DNode, b: DNode) {
+  const rectA = NODE_RECT_BY_ID.get(a.id)!
+  const rectB = NODE_RECT_BY_ID.get(b.id)!
+  const geom = routeEdge(rectA, rectB, NODE_RECTS)
+  const trimmed = trimEdgeGeom(geom, a.x, a.y, R + 2, b.x, b.y, R + 2)
+  if (trimmed.kind === 'curve') {
+    return {
+      ...trimmed,
+      mx: (a.x + 2 * trimmed.cx + b.x) / 4,
+      my: (a.y + 2 * trimmed.cy + b.y) / 4,
+    }
   }
+  return { ...trimmed, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }
 }
 
 export function DirectedDegreeViz() {
@@ -250,22 +271,32 @@ export function DirectedDegreeViz() {
               const B = POS.get(e.to)!
               const role = roleOf(i)
               const st = edgeStyle(role)
-              const trimmed = endpoints(A, B, R + 2)
+              const g = routedEdge(A, B)
               return (
                 <g key={`e${i}`} opacity={st.opacity}>
-                  <line
-                    x1={trimmed.x1}
-                    y1={trimmed.y1}
-                    x2={trimmed.x2}
-                    y2={trimmed.y2}
-                    stroke={st.stroke}
-                    strokeWidth={st.width}
-                    markerEnd={`url(#dd-${st.marker})`}
-                  />
+                  {g.kind === 'line' ? (
+                    <line
+                      x1={g.x1}
+                      y1={g.y1}
+                      x2={g.x2}
+                      y2={g.y2}
+                      stroke={st.stroke}
+                      strokeWidth={st.width}
+                      markerEnd={`url(#dd-${st.marker})`}
+                    />
+                  ) : (
+                    <path
+                      d={g.d}
+                      fill="none"
+                      stroke={st.stroke}
+                      strokeWidth={st.width}
+                      markerEnd={`url(#dd-${st.marker})`}
+                    />
+                  )}
                   {role === 'next' && (
                     <text
-                      x={(A.x + B.x) / 2}
-                      y={(A.y + B.y) / 2 - 8}
+                      x={g.mx}
+                      y={g.my - 8}
                       textAnchor="middle"
                       fontSize={11}
                       fontWeight={800}

@@ -17,6 +17,7 @@
 
 import { useMemo, useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type Vec = { x: number; y: number }
 
@@ -185,18 +186,6 @@ function runDijkstra(inst: Instance): Step[] {
   return steps
 }
 
-function trim(a: Vec, b: Vec, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
-}
-
 const R = 21
 
 function fmt(v: number): string {
@@ -216,6 +205,45 @@ export function DijkstraHandTrace({ instance }: { instance: keyof typeof INSTANC
   const acceptedEdges = new Set<string>(
     step.relaxations.filter((r) => r.accepted).map((r) => r.edgeKey),
   )
+
+  /**
+   * Per-instance node rects + routedEdge closure (the two instances have
+   * different node sets, so this is `useMemo`-keyed on `inst`). Mirrors B4's
+   * ConstantShiftFail per-preset rect pattern and B6's DagSourceWalk per-preset
+   * useMemo pattern.
+   *
+   * Hybrid carve-out: edges with `e.curve !== undefined` keep their hand-tuned
+   * Bezier path because the arc IS a deliberate visual signal — the `c→a`
+   * cycle edge of `pt3-th1` must bulge BELOW the row (curve=60) to disambiguate
+   * the back-edge of the directed cycle from the forward `a→b→c` chain.
+   * Routing it would either flatten it onto the straight chord (destroying the
+   * cycle's geometric identity) or curve it the wrong way. Joins the carve-out
+   * collection: WhyBFSFailsWeighted s-t (B2), DfsTreeBuilder back-edges (B3),
+   * TopoOrderBuilder direction arcs (B6), NegativeCycleDetector a↔b + s→t (B6),
+   * MstPreorderTSP tour overlay (B7.1 — separate pattern).
+   */
+  const routedStraight = useMemo(() => {
+    const rects: NodeRect[] = inst.nodes.map((n) => ({
+      id: n.id,
+      x: n.pos.x - R,
+      y: n.pos.y - R,
+      w: 2 * R,
+      h: 2 * R,
+    }))
+    const rectById = new Map(rects.map((r) => [r.id, r]))
+    return (aId: string, bId: string) => {
+      const aRect = rectById.get(aId)!
+      const bRect = rectById.get(bId)!
+      const ax = aRect.x + aRect.w / 2
+      const ay = aRect.y + aRect.h / 2
+      const bx = bRect.x + bRect.w / 2
+      const by = bRect.y + bRect.h / 2
+      const geom = trimEdgeGeom(routeEdge(aRect, bRect, rects), ax, ay, R, bx, by, R)
+      const mx = geom.kind === 'line' ? (ax + bx) / 2 : (ax + bx + 2 * geom.cx) / 4
+      const my = geom.kind === 'line' ? (ay + by) / 2 : (ay + by + 2 * geom.cy) / 4
+      return { ...geom, mx, my }
+    }
+  }, [inst])
 
   return (
     <section className="my-6 rounded-xl border border-border bg-bg-elevated p-4 shadow-sm">
@@ -299,15 +327,24 @@ export function DijkstraHandTrace({ instance }: { instance: keyof typeof INSTANC
           </defs>
 
           {inst.edges.map((e) => {
-            const a = inst.nodes.find((n) => n.id === e.u)!.pos
-            const b = inst.nodes.find((n) => n.id === e.v)!.pos
             const key = `${e.u}-${e.v}`
             const active = activeEdges.has(key)
             const accepted = acceptedEdges.has(key)
             const stroke = accepted ? '#16a34a' : active ? '#9f1239' : '#bdb0b2'
             const strokeWidth = active ? 3.4 : 2
+            const markerEnd = accepted
+              ? 'url(#dht-arr-hi)'
+              : active
+                ? 'url(#dht-arr-act)'
+                : inst.directed
+                  ? 'url(#dht-arr)'
+                  : undefined
 
+            // Hand-tuned curve carve-out: edges with `e.curve` set keep their
+            // bespoke Bezier (signals a directed back-edge like c→a in pt3-th1).
             if (e.curve !== undefined) {
+              const a = inst.nodes.find((n) => n.id === e.u)!.pos
+              const b = inst.nodes.find((n) => n.id === e.v)!.pos
               const mx = (a.x + b.x) / 2
               const my = (a.y + b.y) / 2 + e.curve
               const path = `M ${a.x + 18} ${a.y + 5} Q ${mx} ${my} ${b.x + 18} ${b.y + 5}`
@@ -318,15 +355,7 @@ export function DijkstraHandTrace({ instance }: { instance: keyof typeof INSTANC
                     fill="none"
                     stroke={stroke}
                     strokeWidth={strokeWidth}
-                    markerEnd={
-                      accepted
-                        ? 'url(#dht-arr-hi)'
-                        : active
-                          ? 'url(#dht-arr-act)'
-                          : inst.directed
-                            ? 'url(#dht-arr)'
-                            : undefined
-                    }
+                    markerEnd={markerEnd}
                   />
                   <rect x={mx - 12} y={my - 11} width={24} height={20} rx={4} fill="#faf4ee" stroke={stroke} />
                   <text x={mx} y={my} textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={700} fill="#1c1214">
@@ -336,30 +365,30 @@ export function DijkstraHandTrace({ instance }: { instance: keyof typeof INSTANC
               )
             }
 
-            const { x1, y1, x2, y2 } = trim(a, b, R)
-            const mx = (x1 + x2) / 2
-            const my = (y1 + y2) / 2
+            const g = routedStraight(e.u, e.v)
             return (
               <g key={key}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke={stroke}
-                  strokeWidth={strokeWidth}
-                  markerEnd={
-                    accepted
-                      ? 'url(#dht-arr-hi)'
-                      : active
-                        ? 'url(#dht-arr-act)'
-                        : inst.directed
-                          ? 'url(#dht-arr)'
-                          : undefined
-                  }
-                />
-                <rect x={mx - 12} y={my - 11} width={24} height={20} rx={4} fill="#faf4ee" stroke={stroke} />
-                <text x={mx} y={my} textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={700} fill="#1c1214">
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    markerEnd={markerEnd}
+                  />
+                ) : (
+                  <path
+                    d={g.d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    markerEnd={markerEnd}
+                  />
+                )}
+                <rect x={g.mx - 12} y={g.my - 11} width={24} height={20} rx={4} fill="#faf4ee" stroke={stroke} />
+                <text x={g.mx} y={g.my} textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={700} fill="#1c1214">
                   {e.w}
                 </text>
               </g>

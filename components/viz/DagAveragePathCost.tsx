@@ -25,6 +25,7 @@
 import { useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type DagNode = { id: string; x: number; y: number; label: string }
 const NODES: DagNode[] = [
@@ -65,16 +66,28 @@ const RESULT: Record<string, { count: number; sum: number }> = {
 const R = 22
 const LAST_STEP = PROCESS_ORDER.length // 6
 
-function trim(a: DagNode, b: DagNode, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
+const NODE_RECTS: NodeRect[] = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - R,
+  y: n.y - R,
+  w: 2 * R,
+  h: 2 * R,
+}))
+const NODE_RECT_BY_ID = new Map<string, NodeRect>(
+  NODE_RECTS.map((r) => [r.id as string, r]),
+)
+
+/** Routed directed edge, symmetric trim by R so the arrowhead lands on
+ *  the destination border. */
+function routedEdge(fromId: string, toId: string) {
+  const a = NODE_RECT_BY_ID.get(fromId)!
+  const b = NODE_RECT_BY_ID.get(toId)!
+  const ax = a.x + a.w / 2
+  const ay = a.y + a.h / 2
+  const bx = b.x + b.w / 2
+  const by = b.y + b.h / 2
+  const geom = routeEdge(a, b, NODE_RECTS)
+  return trimEdgeGeom(geom, ax, ay, R, bx, by, R)
 }
 
 export function DagAveragePathCost() {
@@ -193,23 +206,30 @@ export function DagAveragePathCost() {
             {EDGES.map((e, i) => {
               const A = POS.get(e.from)!
               const B = POS.get(e.to)!
-              const { x1, y1, x2, y2 } = trim(A, B, R)
+              const g = routedEdge(e.from, e.to)
               const hot = outgoing.some(
                 (oe) => oe.from === e.from && oe.to === e.to,
               )
-              const mx = (x1 + x2) / 2
-              const my = (y1 + y2) / 2
+              const mx = g.kind === 'line' ? (A.x + B.x) / 2 : (A.x + B.x + 2 * g.cx) / 4
+              const my = g.kind === 'line' ? (A.y + B.y) / 2 : (A.y + B.y + 2 * g.cy) / 4
+              const stroke = hot ? '#9f1239' : '#9b8a8d'
+              const strokeWidth = hot ? 3.2 : 1.6
+              const marker = hot ? 'url(#dag-arr-hi)' : 'url(#dag-arr)'
               return (
                 <g key={`e${i}`}>
-                  <line
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke={hot ? '#9f1239' : '#9b8a8d'}
-                    strokeWidth={hot ? 3.2 : 1.6}
-                    markerEnd={hot ? 'url(#dag-arr-hi)' : 'url(#dag-arr)'}
-                  />
+                  {g.kind === 'line' ? (
+                    <line
+                      x1={g.x1}
+                      y1={g.y1}
+                      x2={g.x2}
+                      y2={g.y2}
+                      stroke={stroke}
+                      strokeWidth={strokeWidth}
+                      markerEnd={marker}
+                    />
+                  ) : (
+                    <path d={g.d} fill="none" stroke={stroke} strokeWidth={strokeWidth} markerEnd={marker} />
+                  )}
                   <rect
                     x={mx - 11}
                     y={my - 9}

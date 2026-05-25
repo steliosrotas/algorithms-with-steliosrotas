@@ -25,6 +25,7 @@
  */
 
 import { useState } from 'react'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type NodeId = 'A' | 'B' | 'C' | 'D' | 'E' | 'F'
 
@@ -37,6 +38,28 @@ const NODES: Record<NodeId, { x: number; y: number }> = {
   F: { x: 230, y: 320 },
 }
 const R = 22
+
+const NODE_RECTS: NodeRect[] = (Object.keys(NODES) as NodeId[]).map((id) => ({
+  id,
+  x: NODES[id].x - R,
+  y: NODES[id].y - R,
+  w: 2 * R,
+  h: 2 * R,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r]))
+
+function routedEdge(aId: NodeId, bId: NodeId) {
+  const aRect = NODE_RECT_BY_ID.get(aId)!
+  const bRect = NODE_RECT_BY_ID.get(bId)!
+  const ax = aRect.x + aRect.w / 2
+  const ay = aRect.y + aRect.h / 2
+  const bx = bRect.x + bRect.w / 2
+  const by = bRect.y + bRect.h / 2
+  const geom = trimEdgeGeom(routeEdge(aRect, bRect, NODE_RECTS), ax, ay, R, bx, by, R)
+  const mx = geom.kind === 'line' ? (ax + bx) / 2 : (ax + bx + 2 * geom.cx) / 4
+  const my = geom.kind === 'line' ? (ay + by) / 2 : (ay + by + 2 * geom.cy) / 4
+  return { ...geom, mx, my }
+}
 
 type Edge = { id: string; a: NodeId; b: NodeId; w: number; kind: 'mandatory' | 'tie' }
 
@@ -60,18 +83,6 @@ const PAIRS: Pair[] = [
   { id: 'p5', e1: 'AB', e2: 'DE', valid: true, reason: 'A → {B,E} με A-B και {C,D,F} → {B,E} με D-E.' },
   { id: 'p6', e1: 'CB', e2: 'DE', valid: false, reason: 'Και οι δύο ενώνουν {C,D,F} ↔ {B,E} — η νησίδα {A} μένει αποκομμένη.' },
 ]
-
-function trim(a: { x: number; y: number }, b: { x: number; y: number }, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
-}
 
 const ISLAND_COLOR: Record<NodeId, string> = {
   A: '#fda4af', // rose
@@ -104,11 +115,7 @@ export function MstCountingExplorer() {
             xmlns="http://www.w3.org/2000/svg"
           >
             {EDGES.map((e) => {
-              const a = NODES[e.a]
-              const b = NODES[e.b]
-              const { x1, y1, x2, y2 } = trim(a, b, R)
-              const mx = (x1 + x2) / 2
-              const my = (y1 + y2) / 2
+              const g = routedEdge(e.a, e.b)
               const mandatory = e.kind === 'mandatory'
               const chosenTie = e.kind === 'tie' && chosenTieEdges.has(e.id)
               const unchosenTie = e.kind === 'tie' && !chosenTieEdges.has(e.id)
@@ -121,18 +128,28 @@ export function MstCountingExplorer() {
               const dashed = unchosenTie ? '4 4' : undefined
               return (
                 <g key={e.id}>
-                  <line
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke={stroke}
-                    strokeWidth={strokeWidth}
-                    strokeDasharray={dashed}
-                  />
+                  {g.kind === 'line' ? (
+                    <line
+                      x1={g.x1}
+                      y1={g.y1}
+                      x2={g.x2}
+                      y2={g.y2}
+                      stroke={stroke}
+                      strokeWidth={strokeWidth}
+                      strokeDasharray={dashed}
+                    />
+                  ) : (
+                    <path
+                      d={g.d}
+                      fill="none"
+                      stroke={stroke}
+                      strokeWidth={strokeWidth}
+                      strokeDasharray={dashed}
+                    />
+                  )}
                   <rect
-                    x={mx - 14}
-                    y={my - 11}
+                    x={g.mx - 14}
+                    y={g.my - 11}
                     width={28}
                     height={21}
                     rx={4}
@@ -140,8 +157,8 @@ export function MstCountingExplorer() {
                     stroke={stroke}
                   />
                   <text
-                    x={mx}
-                    y={my}
+                    x={g.mx}
+                    y={g.my}
                     textAnchor="middle"
                     dominantBaseline="central"
                     fontSize={12}

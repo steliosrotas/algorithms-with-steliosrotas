@@ -20,6 +20,7 @@
 import { useState } from 'react'
 import { RotateCcw, ArrowLeftRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 type Slot = { id: string; x: number; y: number; depth: number }
 type Internal = { id: string; x: number; y: number }
@@ -58,6 +59,24 @@ const POS: Record<string, { x: number; y: number }> = {
   root: ROOT,
   ...Object.fromEntries(INTERNAL.map((n) => [n.id, n])),
   ...Object.fromEntries(SLOTS.map((n) => [n.id, n])),
+}
+
+/** Per-node bounding rects sized to each node's visible radius (root=13,
+ *  internal=11, leaf=23). Module-scope since the layout is static. */
+const NODE_RECTS: NodeRect[] = [
+  { id: 'root', x: ROOT.x - 13, y: ROOT.y - 13, w: 26, h: 26 },
+  ...INTERNAL.map((n) => ({ id: n.id, x: n.x - 11, y: n.y - 11, w: 22, h: 22 })),
+  ...SLOTS.map((s) => ({ id: s.id, x: s.x - 23, y: s.y - 23, w: 46, h: 46 })),
+]
+const NODE_RECT_BY_ID = new Map<string, NodeRect>(
+  NODE_RECTS.map((r) => [r.id as string, r]),
+)
+
+/** Routed parent→child edge geometry, center-to-center (no arrowheads). */
+function routedEdge(fromId: string, toId: string) {
+  const a = NODE_RECT_BY_ID.get(fromId)!
+  const b = NODE_RECT_BY_ID.get(toId)!
+  return routeEdge(a, b, NODE_RECTS)
 }
 
 type SwapLog = {
@@ -156,24 +175,29 @@ export function HuffmanSwapViz() {
           {EDGES.map((e) => {
             const p = POS[e.from]
             const c = POS[e.to]
-            const mx = (p.x + c.x) / 2
-            const my = (p.y + c.y) / 2
+            const g = routedEdge(e.from, e.to)
+            const baseMx = g.kind === 'line' ? (p.x + c.x) / 2 : (p.x + c.x + 2 * g.cx) / 4
+            const baseMy = g.kind === 'line' ? (p.y + c.y) / 2 : (p.y + c.y + 2 * g.cy) / 4
             const dx = c.x - p.x
             const dy = c.y - p.y
             const L = Math.hypot(dx, dy) || 1
             return (
               <g key={`${e.from}-${e.to}`}>
-                <line
-                  x1={p.x}
-                  y1={p.y}
-                  x2={c.x}
-                  y2={c.y}
-                  stroke="#b6a6a8"
-                  strokeWidth={1.8}
-                />
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke="#b6a6a8"
+                    strokeWidth={1.8}
+                  />
+                ) : (
+                  <path d={g.d} fill="none" stroke="#b6a6a8" strokeWidth={1.8} />
+                )}
                 <text
-                  x={mx + (-dy / L) * 11}
-                  y={my + (dx / L) * 11}
+                  x={baseMx + (-dy / L) * 11}
+                  y={baseMy + (dx / L) * 11}
                   textAnchor="middle"
                   dominantBaseline="central"
                   fontSize={12}

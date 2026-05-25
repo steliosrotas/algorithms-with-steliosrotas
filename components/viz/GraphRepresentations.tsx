@@ -15,10 +15,9 @@
 import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { L06_GRAPH, neighbors } from './graph-types'
+import { L06_GRAPH, neighbors, routeL06GraphEdge } from './graph-types'
 
 const IDS = [1, 2, 3, 4, 5, 6, 7, 8]
-const NODE = new Map(L06_GRAPH.nodes.map((n) => [n.id, n]))
 
 export function GraphRepresentations() {
   const [sel, setSel] = useState(2)
@@ -58,18 +57,28 @@ export function GraphRepresentations() {
             xmlns="http://www.w3.org/2000/svg"
           >
             {L06_GRAPH.edges.map((e, i) => {
-              const A = NODE.get(e.a)!
-              const B = NODE.get(e.b)!
+              const g = routeL06GraphEdge(e.a, e.b)
               const incident = e.a === sel || e.b === sel
-              return (
+              const stroke = incident ? '#9f1239' : '#9b8a8d'
+              const sw = incident ? 4 : 2
+              return g.kind === 'line' ? (
                 <line
                   key={`e${i}`}
-                  x1={A.x}
-                  y1={A.y}
-                  x2={B.x}
-                  y2={B.y}
-                  stroke={incident ? '#9f1239' : '#9b8a8d'}
-                  strokeWidth={incident ? 4 : 2}
+                  x1={g.x1}
+                  y1={g.y1}
+                  x2={g.x2}
+                  y2={g.y2}
+                  stroke={stroke}
+                  strokeWidth={sw}
+                  strokeLinecap="round"
+                />
+              ) : (
+                <path
+                  key={`e${i}`}
+                  d={g.d}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={sw}
                   strokeLinecap="round"
                 />
               )

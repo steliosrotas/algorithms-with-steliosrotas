@@ -16,6 +16,7 @@ import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 const VIEW_W = 460
 const VIEW_H = 220
@@ -37,6 +38,14 @@ const EDGES: Edge[] = [
 ]
 
 const POS = new Map(NODES.map((n) => [n.id, n]))
+const NODE_RECTS: ReadonlyArray<NodeRect> = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - NODE_R,
+  y: n.y - NODE_R,
+  w: NODE_R * 2,
+  h: NODE_R * 2,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r] as const))
 const INF = Infinity
 
 type DStep = {
@@ -117,28 +126,33 @@ const LAST = STEPS.length - 1
 
 const fmt = (x: number) => (x === INF ? '∞' : String(x))
 
-function edgePath(e: Edge): {
-  x1: number
-  y1: number
-  x2: number
-  y2: number
-  mx: number
-  my: number
-} {
+type EdgePath =
+  | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; mx: number; my: number }
+  | { kind: 'curve'; d: string; mx: number; my: number }
+
+function edgePath(e: Edge): EdgePath {
   const a = POS.get(e.from)!
   const b = POS.get(e.to)!
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  const ux = dx / len
-  const uy = dy / len
+  const rectA = NODE_RECT_BY_ID.get(a.id)!
+  const rectB = NODE_RECT_BY_ID.get(b.id)!
+  const geom = routeEdge(rectA, rectB, NODE_RECTS)
+  const trimmed = trimEdgeGeom(geom, a.x, a.y, NODE_R, b.x, b.y, NODE_R)
+  if (trimmed.kind === 'line') {
+    return {
+      kind: 'line',
+      x1: trimmed.x1,
+      y1: trimmed.y1,
+      x2: trimmed.x2,
+      y2: trimmed.y2,
+      mx: (a.x + b.x) / 2,
+      my: (a.y + b.y) / 2,
+    }
+  }
   return {
-    x1: a.x + ux * NODE_R,
-    y1: a.y + uy * NODE_R,
-    x2: b.x - ux * NODE_R,
-    y2: b.y - uy * NODE_R,
-    mx: (a.x + b.x) / 2,
-    my: (a.y + b.y) / 2,
+    kind: 'curve',
+    d: trimmed.d,
+    mx: (a.x + 2 * trimmed.cx + b.x) / 4,
+    my: (a.y + 2 * trimmed.cy + b.y) / 4,
   }
 }
 
@@ -238,16 +252,27 @@ export function DijkstraInvariantBreak() {
             }
             return (
               <g key={e.id}>
-                <line
-                  x1={g.x1}
-                  y1={g.y1}
-                  x2={g.x2}
-                  y2={g.y2}
-                  stroke={stroke}
-                  strokeWidth={width}
-                  strokeDasharray={dash}
-                  markerEnd={marker}
-                />
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={width}
+                    strokeDasharray={dash}
+                    markerEnd={marker}
+                  />
+                ) : (
+                  <path
+                    d={g.d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={width}
+                    strokeDasharray={dash}
+                    markerEnd={marker}
+                  />
+                )}
                 <rect
                   x={g.mx - 14}
                   y={g.my - 10}

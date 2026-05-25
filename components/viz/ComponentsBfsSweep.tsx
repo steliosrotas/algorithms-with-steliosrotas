@@ -412,7 +412,7 @@ export function ComponentsBfsSweep({ instance = 'pt5-th1', showHeadSucc = false 
 
       <div className="grid gap-4 p-4 md:grid-cols-[1.4fr_1fr]">
         {/* Graph */}
-        <div className="rounded-xl border border-border bg-white p-3">
+        <div className="rounded-xl border border-border bg-bg-elevated p-3">
           <svg viewBox={inst.viewBox} className="w-full">
             {inst.edges.map((e, i) => {
               const ca = state.mark.get(e.a) ?? 0
@@ -488,7 +488,7 @@ export function ComponentsBfsSweep({ instance = 'pt5-th1', showHeadSucc = false 
 
         {/* Side panel */}
         <div className="space-y-3">
-          <div className="rounded-xl border border-border bg-white p-3">
+          <div className="rounded-xl border border-border bg-bg-elevated p-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
               Μετρητές
             </p>
@@ -512,7 +512,7 @@ export function ComponentsBfsSweep({ instance = 'pt5-th1', showHeadSucc = false 
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-white p-3">
+          <div className="rounded-xl border border-border bg-bg-elevated p-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
               Συνιστώσες
             </p>
@@ -536,7 +536,7 @@ export function ComponentsBfsSweep({ instance = 'pt5-th1', showHeadSucc = false 
           </div>
 
           {showHeadSucc && headSucc && (
-            <div className="rounded-xl border border-border bg-white p-3">
+            <div className="rounded-xl border border-border bg-bg-elevated p-3">
               <p className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
                 Head[] και Succ[]
               </p>
@@ -597,7 +597,7 @@ export function ComponentsBfsSweep({ instance = 'pt5-th1', showHeadSucc = false 
             type="button"
             onClick={stepBack}
             disabled={k === 0}
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
           >
             <ChevronLeft size={16} /> πίσω
           </button>
@@ -605,7 +605,7 @@ export function ComponentsBfsSweep({ instance = 'pt5-th1', showHeadSucc = false 
             type="button"
             onClick={() => setPlaying(!playing)}
             disabled={state.phase === 'done'}
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
           >
             {playing ? <Pause size={16} /> : <Play size={16} />}
             {playing ? 'παύση' : 'παίξε'}
@@ -614,14 +614,14 @@ export function ComponentsBfsSweep({ instance = 'pt5-th1', showHeadSucc = false 
             type="button"
             onClick={stepForward}
             disabled={state.phase === 'done'}
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-2.5 py-1.5 text-sm hover:bg-bg-soft disabled:opacity-40"
           >
             επόμενο <ChevronRight size={16} />
           </button>
           <button
             type="button"
             onClick={reset}
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2.5 py-1.5 text-sm hover:bg-bg-soft"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-2.5 py-1.5 text-sm hover:bg-bg-soft"
           >
             <RotateCcw size={14} /> reset
           </button>

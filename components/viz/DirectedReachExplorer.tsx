@@ -23,6 +23,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Play, Pause, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type RNode = { id: number; x: number; y: number; label: string }
 const NODES: RNode[] = [
@@ -36,6 +37,14 @@ const NODES: RNode[] = [
 const POS = new Map(NODES.map((n) => [n.id, n]))
 const N = NODES.length
 const R = 22
+const NODE_RECTS: ReadonlyArray<NodeRect> = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - R,
+  y: n.y - R,
+  w: R * 2,
+  h: R * 2,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r] as const))
 
 /** A source/sink DAG: v1 fans out to v2,v3 → v4 → v5,v6 (no back-edges). */
 const EDGES: { from: number; to: number }[] = [
@@ -79,16 +88,20 @@ function bfsLevels(adj: Map<number, number[]>, s: number): number[][] {
   return levels
 }
 
-function endpoints(a: RNode, b: RNode, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
+/**
+ * Collision-aware edge routing: straight segment trimmed to the node borders
+ * when the centerline clears every other node, or a quadratic Bezier that
+ * bends around the offending node, also trimmed so the arrowhead lands on
+ * the target border. The `trimPad` argument lets the ghost reverse edges
+ * keep their wider visual gap (R + 8) so they sit alongside the forward
+ * edge in undirected mode. Locks out the «edge through unrelated node»
+ * class of bug structurally per Phase E.4.6.
+ */
+function routedEdge(a: RNode, b: RNode, trimPad: number) {
+  const rectA = NODE_RECT_BY_ID.get(a.id)!
+  const rectB = NODE_RECT_BY_ID.get(b.id)!
+  const geom = routeEdge(rectA, rectB, NODE_RECTS)
+  return trimEdgeGeom(geom, a.x, a.y, trimPad, b.x, b.y, trimPad)
 }
 
 export function DirectedReachExplorer() {
@@ -255,17 +268,29 @@ export function DirectedReachExplorer() {
               const explored =
                 reached.has(e.from) &&
                 (reached.has(e.to) || frontier.has(e.to))
-              const ep = endpoints(A, B, R + 2)
-              return (
+              const g = routedEdge(A, B, R + 2)
+              const stroke = explored ? '#1d4ed8' : '#c9c2bd'
+              const strokeWidth = explored ? 2.8 : 1.8
+              const markerEnd = explored ? 'url(#dr-fwd-on)' : 'url(#dr-fwd-off)'
+              return g.kind === 'line' ? (
                 <line
                   key={`fwd${i}`}
-                  x1={ep.x1}
-                  y1={ep.y1}
-                  x2={ep.x2}
-                  y2={ep.y2}
-                  stroke={explored ? '#1d4ed8' : '#c9c2bd'}
-                  strokeWidth={explored ? 2.8 : 1.8}
-                  markerEnd={explored ? 'url(#dr-fwd-on)' : 'url(#dr-fwd-off)'}
+                  x1={g.x1}
+                  y1={g.y1}
+                  x2={g.x2}
+                  y2={g.y2}
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
+                  markerEnd={markerEnd}
+                />
+              ) : (
+                <path
+                  key={`fwd${i}`}
+                  d={g.d}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
+                  markerEnd={markerEnd}
                 />
               )
             })}
@@ -273,14 +298,25 @@ export function DirectedReachExplorer() {
               EDGES.map((e, i) => {
                 const A = POS.get(e.to)!
                 const B = POS.get(e.from)!
-                const ep = endpoints(A, B, R + 8)
-                return (
+                const g = routedEdge(A, B, R + 8)
+                return g.kind === 'line' ? (
                   <line
                     key={`rev${i}`}
-                    x1={ep.x1}
-                    y1={ep.y1}
-                    x2={ep.x2}
-                    y2={ep.y2}
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke="#c9c2bd"
+                    strokeWidth={1.4}
+                    strokeDasharray="4 3"
+                    markerEnd="url(#dr-back-ghost)"
+                    opacity={0.7}
+                  />
+                ) : (
+                  <path
+                    key={`rev${i}`}
+                    d={g.d}
+                    fill="none"
                     stroke="#c9c2bd"
                     strokeWidth={1.4}
                     strokeDasharray="4 3"

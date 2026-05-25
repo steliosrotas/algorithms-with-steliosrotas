@@ -28,8 +28,9 @@
 import { useMemo, useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Play, Pause, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { L06_GRAPH, neighbors, edgeKey } from './graph-types'
+import { L06_GRAPH, neighbors, edgeKey, routeL06GraphEdge } from './graph-types'
 import type { GraphNodeId } from './graph-types'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 // --- precomputed DFS run -----------------------------------------------------
 
@@ -98,6 +99,30 @@ const TREE_PARENT: Record<number, number> = {
   6: 5,
   7: 3,
   8: 7,
+}
+
+/**
+ * Collision rects for the right-pane DFS-tree drawing. Radius 22 = visible
+ * r=20 + 2 px padding so any future tree-layout edit that puts an unrelated
+ * tree node on a tree-edge centreline auto-curves the edge instead of
+ * clipping silently. The back edges keep their hand-tuned 36 px perpendicular
+ * offset by design — they are a visual signal («back edge to ancestor»)
+ * rather than collision routing, mirroring the WhyBFSFailsWeighted s-t arc
+ * carve-out in chunk B2.
+ */
+const TREE_RECTS: NodeRect[] = Object.entries(TREE_POS).map(([idStr, p]) => ({
+  id: Number(idStr),
+  x: p.x - 22,
+  y: p.y - 22,
+  w: 44,
+  h: 44,
+}))
+const TREE_RECT_BY_ID = new Map(TREE_RECTS.map((r) => [r.id, r]))
+
+function routeTreeEdge(a: number, b: number) {
+  const ra = TREE_RECT_BY_ID.get(a)!
+  const rb = TREE_RECT_BY_ID.get(b)!
+  return routeEdge(ra, rb, TREE_RECTS)
 }
 
 // --- component ---------------------------------------------------------------
@@ -212,21 +237,30 @@ export function DfsTreeBuilder() {
           </div>
           <svg viewBox={L06_GRAPH.viewBox} className="block h-auto w-full" role="img">
             {L06_GRAPH.edges.map((e, i) => {
-              const A = L06_GRAPH.nodes.find((n) => n.id === e.a)!
-              const B = L06_GRAPH.nodes.find((n) => n.id === e.b)!
+              const g = routeL06GraphEdge(e.a, e.b)
               const ek = edgeKey(e.a, e.b)
               const isTree = treeEdgeKeys.has(ek)
               const isBack = backEdgeKeys.has(ek)
               const stroke = isTree ? '#9f1239' : isBack ? '#d97706' : '#cbb8ba'
               const sw = isTree ? 4 : isBack ? 3 : 1.5
               const dash = isBack ? '5 4' : undefined
-              return (
+              return g.kind === 'line' ? (
                 <line
                   key={`g-${i}`}
-                  x1={A.x}
-                  y1={A.y}
-                  x2={B.x}
-                  y2={B.y}
+                  x1={g.x1}
+                  y1={g.y1}
+                  x2={g.x2}
+                  y2={g.y2}
+                  stroke={stroke}
+                  strokeWidth={sw}
+                  strokeDasharray={dash}
+                  strokeLinecap="round"
+                />
+              ) : (
+                <path
+                  key={`g-${i}`}
+                  d={g.d}
+                  fill="none"
                   stroke={stroke}
                   strokeWidth={sw}
                   strokeDasharray={dash}
@@ -279,15 +313,23 @@ export function DfsTreeBuilder() {
             {Object.entries(TREE_PARENT).map(([childStr, par]) => {
               const child = Number(childStr)
               if (!visitedSet.has(child)) return null
-              const A = TREE_POS[par]
-              const B = TREE_POS[child]
-              return (
+              const g = routeTreeEdge(par, child)
+              return g.kind === 'line' ? (
                 <line
                   key={`t-${child}`}
-                  x1={A.x}
-                  y1={A.y}
-                  x2={B.x}
-                  y2={B.y}
+                  x1={g.x1}
+                  y1={g.y1}
+                  x2={g.x2}
+                  y2={g.y2}
+                  stroke="#9f1239"
+                  strokeWidth={3.5}
+                  strokeLinecap="round"
+                />
+              ) : (
+                <path
+                  key={`t-${child}`}
+                  d={g.d}
+                  fill="none"
                   stroke="#9f1239"
                   strokeWidth={3.5}
                   strokeLinecap="round"

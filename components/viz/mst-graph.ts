@@ -12,6 +12,8 @@
  *   MST = { E-G 1, C-F 2, A-C 3, C-D 4, B-E 6, A-B 7 },  total cost 23.
  */
 
+import { routeEdge, type NodeRect } from './edge-routing'
+
 export type MstNode = { id: string; x: number; y: number }
 export type MstEdge = { id: string; a: string; b: string; w: number }
 
@@ -88,6 +90,80 @@ export function trimmedEdge(a: MstNode, b: MstNode, r = MST_NODE_R) {
     mx: (a.x + b.x) / 2,
     my: (a.y + b.y) / 2,
   }
+}
+
+/**
+ * Bounding-square AABB per MST node, ready to feed `routeEdge`. Pre-computed
+ * once at module scope so per-edge calls don't reallocate. Conservative for
+ * circular nodes (the corners of the square poke out past the circle), but
+ * correct: any collision the square triggers IS a collision with the circle
+ * plus padding, never the reverse.
+ */
+const MST_RECTS: ReadonlyArray<NodeRect> = MST_NODES.map((n) => ({
+  id: n.id,
+  x: n.x - MST_NODE_R,
+  y: n.y - MST_NODE_R,
+  w: MST_NODE_R * 2,
+  h: MST_NODE_R * 2,
+}))
+
+const MST_RECT_BY_ID = new Map(MST_RECTS.map((r) => [r.id, r] as const))
+
+/**
+ * Geometry for an MST edge — either a straight trimmed segment (the common
+ * case for the planar wheel layout) or a quadratic Bezier curving around an
+ * unrelated node (the structural lockout against the
+ * `RiverCrossingStateGraph` class of bug, see [[phase-e46-edge-routing]]).
+ *
+ * Both variants expose `mx`/`my` for label placement and `x1,y1,x2,y2` for
+ * any halo / underlay that wants centre-to-centre coordinates. Consumers
+ * branch on `kind`: line → render `<line>`; curve → render
+ * `<path d={d} fill="none">`.
+ */
+export type MstEdgeGeom =
+  | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; mx: number; my: number }
+  | { kind: 'curve'; d: string; x1: number; y1: number; x2: number; y2: number; mx: number; my: number }
+
+/**
+ * Collision-aware edge routing on the shared MST layout. Returns a straight
+ * line trimmed to the circle borders when the segment between two nodes clears
+ * every other node (the steady-state case for the planar wheel); otherwise a
+ * quadratic Bezier that curves around the obstructing node, with the label
+ * anchor moved to the Bezier midpoint `(P0 + 2Q + P2) / 4` so the weight chip
+ * tracks the bend.
+ */
+export function routeMstEdge(a: MstNode, b: MstNode, r = MST_NODE_R): MstEdgeGeom {
+  const rectA = MST_RECT_BY_ID.get(a.id) ?? rectOf(a, r)
+  const rectB = MST_RECT_BY_ID.get(b.id) ?? rectOf(b, r)
+  const geom = routeEdge(rectA, rectB, MST_RECTS)
+
+  if (geom.kind === 'line') {
+    const trim = trimmedEdge(a, b, r)
+    return {
+      kind: 'line',
+      x1: trim.x1,
+      y1: trim.y1,
+      x2: trim.x2,
+      y2: trim.y2,
+      mx: trim.mx,
+      my: trim.my,
+    }
+  }
+
+  return {
+    kind: 'curve',
+    d: geom.d,
+    x1: a.x,
+    y1: a.y,
+    x2: b.x,
+    y2: b.y,
+    mx: (a.x + 2 * geom.cx + b.x) / 4,
+    my: (a.y + 2 * geom.cy + b.y) / 4,
+  }
+}
+
+function rectOf(n: MstNode, r: number): NodeRect {
+  return { id: n.id, x: n.x - r, y: n.y - r, w: r * 2, h: r * 2 }
 }
 
 /**

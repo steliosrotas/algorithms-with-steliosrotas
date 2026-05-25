@@ -15,7 +15,8 @@
 import { useMemo, useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { layoutForest, type Pt } from './uf-layout'
+import { forestNodeRects, layoutForest } from './uf-layout'
+import { routeEdge, trimEdgeGeom } from './edge-routing'
 
 const ELEMS = ['1', '2', '3', '4', '5', '6', '7']
 const NODE_R = 16
@@ -137,21 +138,6 @@ const STEPS: PCStep[] = [
   },
 ]
 
-/** trim a child→parent segment to the two circle borders */
-function seg(from: Pt, to: Pt) {
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-  const len = Math.hypot(dx, dy) || 1
-  const ux = dx / len
-  const uy = dy / len
-  return {
-    x1: from.x + ux * NODE_R,
-    y1: from.y + uy * NODE_R,
-    x2: to.x - ux * (NODE_R + 7),
-    y2: to.y - uy * (NODE_R + 7),
-  }
-}
-
 export function PathCompressionViz() {
   const last = STEPS.length - 1
   const [step, setStep] = useState(0)
@@ -173,6 +159,24 @@ export function PathCompressionViz() {
     [cur],
   )
   const offsetX = (view.w - layout.width) / 2
+
+  const { rects: nodeRects, rectById: nodeRectById } = useMemo(
+    () => forestNodeRects(layout, NODE_R),
+    [layout],
+  )
+
+  /** routed child→parent geometry; asymmetric trim leaves NODE_R + 7 on the
+   *  parent side so the arrowhead marker has its expected gap. */
+  const routedEdge = (childId: string, parentId: string) => {
+    const cR = nodeRectById.get(childId)!
+    const pR = nodeRectById.get(parentId)!
+    const cx = cR.x + cR.w / 2
+    const cy = cR.y + cR.h / 2
+    const px = pR.x + pR.w / 2
+    const py = pR.y + pR.h / 2
+    const geom = routeEdge(cR, pR, nodeRects)
+    return trimEdgeGeom(geom, cx, cy, NODE_R, px, py, NODE_R + 7)
+  }
 
   const pathNodes = new Set(cur.path)
   const pathEdge = new Set<string>()
@@ -248,7 +252,7 @@ export function PathCompressionViz() {
           <g transform={`translate(${offsetX}, 0)`}>
             {/* edges */}
             {ELEMS.filter((e) => cur.parent[e] !== e).map((c) => {
-              const g = seg(layout.pos.get(c)!, layout.pos.get(cur.parent[c])!)
+              const g = routedEdge(c, cur.parent[c])
               const isNew = rerouted.has(c)
               const onPath = pathEdge.has(c)
               const stroke = isNew ? '#059669' : onPath ? '#9f1239' : '#6b5d5f'
@@ -257,7 +261,8 @@ export function PathCompressionViz() {
                 : onPath
                   ? 'url(#pcv-arrow-hot)'
                   : 'url(#pcv-arrow)'
-              return (
+              const strokeWidth = isNew || onPath ? 3.4 : 1.9
+              return g.kind === 'line' ? (
                 <line
                   key={`e${c}`}
                   x1={g.x1}
@@ -265,7 +270,16 @@ export function PathCompressionViz() {
                   x2={g.x2}
                   y2={g.y2}
                   stroke={stroke}
-                  strokeWidth={isNew || onPath ? 3.4 : 1.9}
+                  strokeWidth={strokeWidth}
+                  markerEnd={marker}
+                />
+              ) : (
+                <path
+                  key={`e${c}`}
+                  d={g.d}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
                   markerEnd={marker}
                 />
               )

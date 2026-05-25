@@ -28,6 +28,7 @@
 import { useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type GDNode = { id: string; x: number; y: number }
 const NODES: GDNode[] = [
@@ -36,7 +37,6 @@ const NODES: GDNode[] = [
   { id: 'b', x: 175, y: 170 },
   { id: 't', x: 290, y: 110 },
 ]
-const POS = new Map(NODES.map((n) => [n.id, n]))
 const VERTS = ['s', 'a', 'b', 't']
 
 type GDEdge = { from: string; to: string; w: number }
@@ -50,6 +50,28 @@ const EDGES: GDEdge[] = [
 const R = 21
 const INF = Infinity
 const fmt = (d: number) => (d === INF ? '∞' : String(d))
+
+const NODE_RECTS: NodeRect[] = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - R,
+  y: n.y - R,
+  w: 2 * R,
+  h: 2 * R,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r]))
+
+function routedEdge(aId: string, bId: string) {
+  const aRect = NODE_RECT_BY_ID.get(aId)!
+  const bRect = NODE_RECT_BY_ID.get(bId)!
+  const ax = aRect.x + aRect.w / 2
+  const ay = aRect.y + aRect.h / 2
+  const bx = bRect.x + bRect.w / 2
+  const by = bRect.y + bRect.h / 2
+  const geom = trimEdgeGeom(routeEdge(aRect, bRect, NODE_RECTS), ax, ay, R, bx, by, R)
+  const mx = geom.kind === 'line' ? (ax + bx) / 2 : (ax + bx + 2 * geom.cx) / 4
+  const my = geom.kind === 'line' ? (ay + by) / 2 : (ay + by + 2 * geom.cy) / 4
+  return { ...geom, mx, my }
+}
 
 /* ------------------------------------------------------------------ */
 /* Pre-computed traces for both algorithms.                            */
@@ -140,18 +162,6 @@ const BF_IMPS: BFImprovement[][] = [
 // For step 4 (which extends Dijkstra), BF stays at row 3.
 const LAST_STEP = 4
 
-function trim(a: GDNode, b: GDNode, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
-}
-
 /** Mini graph SVG, shared by both panels. Highlights vary by side. */
 function MiniGraph({
   highlightedEdges,
@@ -209,26 +219,35 @@ function MiniGraph({
       </defs>
 
       {EDGES.map((e, i) => {
-        const A = POS.get(e.from)!
-        const B = POS.get(e.to)!
-        const { x1, y1, x2, y2 } = trim(A, B, R)
+        const g = routedEdge(e.from, e.to)
         const hot = highlightedEdges.has(`${e.from}->${e.to}`)
-        const mx = (x1 + x2) / 2
-        const my = (y1 + y2) / 2
+        const stroke = hot ? accent : '#9b8a8d'
+        const strokeWidth = hot ? 3.2 : 1.6
+        const markerEnd = hot ? markerHi : 'url(#gd-arr)'
         return (
           <g key={`e${i}`}>
-            <line
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-              stroke={hot ? accent : '#9b8a8d'}
-              strokeWidth={hot ? 3.2 : 1.6}
-              markerEnd={hot ? markerHi : 'url(#gd-arr)'}
-            />
+            {g.kind === 'line' ? (
+              <line
+                x1={g.x1}
+                y1={g.y1}
+                x2={g.x2}
+                y2={g.y2}
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                markerEnd={markerEnd}
+              />
+            ) : (
+              <path
+                d={g.d}
+                fill="none"
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                markerEnd={markerEnd}
+              />
+            )}
             <rect
-              x={mx - 9}
-              y={my - 9}
+              x={g.mx - 9}
+              y={g.my - 9}
               width={18}
               height={16}
               rx={3}
@@ -236,8 +255,8 @@ function MiniGraph({
               stroke={hot ? accent : '#cdbfc0'}
             />
             <text
-              x={mx}
-              y={my - 1}
+              x={g.mx}
+              y={g.my - 1}
               textAnchor="middle"
               dominantBaseline="central"
               fontSize={10}

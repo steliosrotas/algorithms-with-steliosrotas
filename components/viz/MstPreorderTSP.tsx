@@ -16,6 +16,7 @@
  */
 
 import { useState } from 'react'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type NodeId = 'v₁' | 'v₂' | 'v₃' | 'v₄' | 'v₅'
 
@@ -27,6 +28,43 @@ const NODES: Record<NodeId, { x: number; y: number }> = {
   'v₅': { x: 150, y: 320 },
 }
 const R = 22
+
+const NODE_RECTS: NodeRect[] = (Object.keys(NODES) as NodeId[]).map((id) => ({
+  id,
+  x: NODES[id].x - R,
+  y: NODES[id].y - R,
+  w: 2 * R,
+  h: 2 * R,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r]))
+
+/** Base undirected weighted edge — symmetric trim by R. */
+function routedEdge(aId: NodeId, bId: NodeId) {
+  const aRect = NODE_RECT_BY_ID.get(aId)!
+  const bRect = NODE_RECT_BY_ID.get(bId)!
+  const ax = aRect.x + aRect.w / 2
+  const ay = aRect.y + aRect.h / 2
+  const bx = bRect.x + bRect.w / 2
+  const by = bRect.y + bRect.h / 2
+  const geom = trimEdgeGeom(routeEdge(aRect, bRect, NODE_RECTS), ax, ay, R, bx, by, R)
+  const mx = geom.kind === 'line' ? (ax + bx) / 2 : (ax + bx + 2 * geom.cx) / 4
+  const my = geom.kind === 'line' ? (ay + by) / 2 : (ay + by + 2 * geom.cy) / 4
+  return { ...geom, mx, my }
+}
+
+/** Tour overlay edge — asymmetric trim (rA = R+4, rB = R-6) to keep the
+ *  pre-retrofit visual gap byte-identical for the line case. The arrowhead
+ *  at x2/y2 lands 6 px inside the target node, the line starts 4 px outside
+ *  the source — exactly the pre-retrofit `trim(a, b, R+4/R-6)` behavior. */
+function routedTourEdge(aId: NodeId, bId: NodeId) {
+  const aRect = NODE_RECT_BY_ID.get(aId)!
+  const bRect = NODE_RECT_BY_ID.get(bId)!
+  const ax = aRect.x + aRect.w / 2
+  const ay = aRect.y + aRect.h / 2
+  const bx = bRect.x + bRect.w / 2
+  const by = bRect.y + bRect.h / 2
+  return trimEdgeGeom(routeEdge(aRect, bRect, NODE_RECTS), ax, ay, R + 4, bx, by, R - 6)
+}
 
 type Edge = { a: NodeId; b: NodeId; w: number }
 
@@ -58,18 +96,6 @@ function edgeKey(a: NodeId, b: NodeId): string {
 function edgeWeight(a: NodeId, b: NodeId): number {
   const k = edgeKey(a, b)
   return EDGES.find((e) => edgeKey(e.a, e.b) === k)!.w
-}
-
-function trim(a: { x: number; y: number }, b: { x: number; y: number }, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
 }
 
 export function MstPreorderTSP() {
@@ -130,11 +156,7 @@ export function MstPreorderTSP() {
           </defs>
 
           {EDGES.map((e) => {
-            const a = NODES[e.a]
-            const b = NODES[e.b]
-            const { x1, y1, x2, y2 } = trim(a, b, R)
-            const mx = (x1 + x2) / 2
-            const my = (y1 + y2) / 2
+            const g = routedEdge(e.a, e.b)
             const k = edgeKey(e.a, e.b)
             const isMst = MST_EDGES.has(k)
             const isTour = TOUR_EDGES.has(k)
@@ -146,18 +168,22 @@ export function MstPreorderTSP() {
             const opacity = !visible && stage > 0 ? 0.18 : 1
             return (
               <g key={k} opacity={opacity}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke={stroke}
-                  strokeWidth={sw}
-                />
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={sw}
+                  />
+                ) : (
+                  <path d={g.d} fill="none" stroke={stroke} strokeWidth={sw} />
+                )}
                 {stage <= 1 && (
                   <>
-                    <rect x={mx - 11} y={my - 10} width={22} height={20} rx={4} fill="#faf4ee" stroke={isMst && stage >= 1 ? '#16a34a' : '#cdbfc0'} />
-                    <text x={mx} y={my} textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={700} fill="#1c1214">
+                    <rect x={g.mx - 11} y={g.my - 10} width={22} height={20} rx={4} fill="#faf4ee" stroke={isMst && stage >= 1 ? '#16a34a' : '#cdbfc0'} />
+                    <text x={g.mx} y={g.my} textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={700} fill="#1c1214">
                       {e.w}
                     </text>
                   </>
@@ -169,22 +195,30 @@ export function MstPreorderTSP() {
           {stage === 2 && (
             <>
               {TOUR.slice(0, -1).map((u, i) => {
-                const a = NODES[u]
-                const b = NODES[TOUR[i + 1]]
-                const { x2, y2 } = trim(a, b, R - 6)
-                const { x1, y1 } = trim(a, b, R + 4)
+                const t = routedTourEdge(u, TOUR[i + 1])
                 return (
                   <g key={`tour-${i}`}>
-                    <line
-                      x1={x1}
-                      y1={y1}
-                      x2={x2}
-                      y2={y2}
-                      stroke="#9f1239"
-                      strokeWidth={3.2}
-                      strokeDasharray="6 3"
-                      markerEnd="url(#mpt-arr)"
-                    />
+                    {t.kind === 'line' ? (
+                      <line
+                        x1={t.x1}
+                        y1={t.y1}
+                        x2={t.x2}
+                        y2={t.y2}
+                        stroke="#9f1239"
+                        strokeWidth={3.2}
+                        strokeDasharray="6 3"
+                        markerEnd="url(#mpt-arr)"
+                      />
+                    ) : (
+                      <path
+                        d={t.d}
+                        fill="none"
+                        stroke="#9f1239"
+                        strokeWidth={3.2}
+                        strokeDasharray="6 3"
+                        markerEnd="url(#mpt-arr)"
+                      />
+                    )}
                   </g>
                 )
               })}

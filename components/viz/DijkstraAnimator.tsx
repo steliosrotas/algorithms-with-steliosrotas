@@ -13,6 +13,7 @@
 
 import { useMemo, useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 type DNode = { id: string; x: number; y: number }
 type DEdge = { from: string; to: string; w: number }
@@ -37,6 +38,15 @@ const EDGES: DEdge[] = [
   { from: 'd', to: 't', w: 6 },
 ]
 const POS = new Map(NODES.map((n) => [n.id, n]))
+const NODE_R = 22
+const NODE_RECTS: ReadonlyArray<NodeRect> = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - NODE_R,
+  y: n.y - NODE_R,
+  w: NODE_R * 2,
+  h: NODE_R * 2,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r] as const))
 const INF = Infinity
 
 type Relax = { to: string; oldD: number; newD: number }
@@ -84,19 +94,24 @@ function runDijkstra(): DStep[] {
 
 const fmt = (d: number) => (d === INF ? '∞' : String(d))
 
-/** Shorten an edge so its arrowhead lands on the node border. */
-function trim(a: DNode, b: DNode, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  const ux = dx / len
-  const uy = dy / len
-  return {
-    x1: a.x + ux * r,
-    y1: a.y + uy * r,
-    x2: b.x - ux * r,
-    y2: b.y - uy * r,
+/**
+ * Collision-aware edge routing for this viz: returns a straight line trimmed
+ * to the node borders (the steady-state case for this 6-node layout) or a
+ * quadratic Bezier curving around an unrelated node, also trimmed so the
+ * arrowhead lands on the target border. Locks out the «edge through unrelated
+ * node» class of bug structurally per Phase E.4.6.
+ */
+function routedEdge(a: DNode, b: DNode) {
+  const rectA = NODE_RECT_BY_ID.get(a.id)!
+  const rectB = NODE_RECT_BY_ID.get(b.id)!
+  const geom = routeEdge(rectA, rectB, NODE_RECTS)
+  const trimmed = trimEdgeGeom(geom, a.x, a.y, NODE_R, b.x, b.y, NODE_R)
+  const mx = (a.x + b.x) / 2
+  const my = (a.y + b.y) / 2
+  if (trimmed.kind === 'curve') {
+    return { ...trimmed, mx: (a.x + 2 * trimmed.cx + b.x) / 4, my: (a.y + 2 * trimmed.cy + b.y) / 4 }
   }
+  return { ...trimmed, mx, my }
 }
 
 export function DijkstraAnimator() {
@@ -182,24 +197,35 @@ export function DijkstraAnimator() {
           {EDGES.map((e, i) => {
             const A = POS.get(e.from)!
             const B = POS.get(e.to)!
-            const { x1, y1, x2, y2 } = trim(A, B, 22)
+            const g = routedEdge(A, B)
             const hot = extracted === e.from && !settled.has(e.to)
-            const mx = (x1 + x2) / 2
-            const my = (y1 + y2) / 2
+            const stroke = hot ? '#9f1239' : '#9b8a8d'
+            const strokeWidth = hot ? 3 : 1.8
+            const markerEnd = hot ? 'url(#dij-arr-hi)' : 'url(#dij-arr)'
             return (
               <g key={`e${i}`}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke={hot ? '#9f1239' : '#9b8a8d'}
-                  strokeWidth={hot ? 3 : 1.8}
-                  markerEnd={hot ? 'url(#dij-arr-hi)' : 'url(#dij-arr)'}
-                />
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    markerEnd={markerEnd}
+                  />
+                ) : (
+                  <path
+                    d={g.d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    markerEnd={markerEnd}
+                  />
+                )}
                 <rect
-                  x={mx - 11}
-                  y={my - 10}
+                  x={g.mx - 11}
+                  y={g.my - 10}
                   width={22}
                   height={16}
                   rx={3}
@@ -207,8 +233,8 @@ export function DijkstraAnimator() {
                   stroke={hot ? '#9f1239' : '#cdbfc0'}
                 />
                 <text
-                  x={mx}
-                  y={my - 1}
+                  x={g.mx}
+                  y={g.my - 1}
                   textAnchor="middle"
                   fontSize={11}
                   fontWeight={700}

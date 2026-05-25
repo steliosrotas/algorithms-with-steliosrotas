@@ -4,31 +4,58 @@
 > next `☐` paper from the checklist, follow the per-session protocol, mark it
 > `☑`. Repeat. Nothing here depends on chat history.
 
+> **POLICY UPDATE 2026-05-24 — anonymization DROPPED.** The user authorised
+> de-anonymizing the bank in Phase E pre-flight (Q2: «no need to keep
+> anything private from students»). New transcriptions and all existing
+> entries now use real dated `source: 'june-2024' | 'sept-2024' | …`
+> instead of `paperLabel: 'Παλαιό Θέμα #N'`. The `private_material/`
+> directory has been un-gitignored. The original anonymization conventions
+> (struck through below) are kept for historical context only — see
+> `plans/PHASE_E_PLAN.md § E.0` for the bank de-anonymization migration
+> task that converts them.
+
 ## Goal
 
 Transcribe **every** past-exam paper (`private_material/oldtests/`) and every
 frontistirio set (`private_material/inclass/`) from PDF/image into the app's
 exercise bank — split into per-lecture sub-exercises, each with a
-beginner-friendly Greek solution — then **anonymise** in the UI.
+beginner-friendly Greek solution — with dated source attribution in the UI.
 
-> **Privacy architecture (since 2026-05-22).** All raw university materials live
-> in `/private_material`, which is **git-ignored** — never committed, never
-> published. The old public copy under `public/material/exercises/` has been
-> removed. Source files therefore no longer need to be *deleted* after
-> transcription: they simply stay local-only in `private_material`. Earlier
-> papers that were already deleted remain recoverable via `git show`.
+> **~~Privacy architecture (since 2026-05-22).~~ DROPPED 2026-05-24.** All raw
+> university materials live in `/private_material`. The `.gitignore` rule
+> that hid this directory was removed; raw source PDFs/images are now tracked
+> and shipped. After E.0 (bank de-anonymization migration) lands, every entry
+> in `content/practice/exercises.tsx` carries a dated `source` field and the
+> `paperLabel: 'Παλαιό Θέμα #N'` pattern is gone.
 
 ## Conventions
 
-### Anonymisation
-- Never display the real exam date/session anywhere in the app.
-- Each source paper gets a fixed label: old exams → **`Παλαιό Θέμα #N`**;
-  frontistirio → **`Φροντιστηριακό Σετ #N`** (numbers fixed by the checklist
-  below — do not renumber).
-- Every transcribed exercise carries `paperLabel: 'Παλαιό Θέμα #N'`, **omits**
-  `source` (the dated `ExamSource`), and **omits** `sourceFile`.
-- `ExerciseCard` auto-renders `<ExamTranscriptionNotice/>` (the takedown notice)
-  whenever `paperLabel` is set.
+### ~~Anonymisation~~ Dated source attribution (NEW POLICY)
+- Display the real exam date/session in every UI surface that cites a problem.
+- Each source paper carries a dated `source: ExamSource` value (defined in
+  `content/practice/types.ts` — e.g. `'june-2024'`, `'sept-2025'`,
+  `'frontistirio-2023-24'`, `'frontistirio-misc'`).
+- Every transcribed exercise carries `source: '...'` and a `sourceFile`
+  pointer (PDF/image path under `material/past_exams/` for the 2024/2025
+  papers, or under `private_material/` for the older archive). The
+  `paperLabel: 'Παλαιό Θέμα #N'` field is removed during E.0; new entries
+  authored after E.0 must not introduce it.
+- The per-card takedown notice was **removed** 2026-05-24 (user flagged the
+  per-card repetition as noise). The `ExamTranscriptionNotice` component is
+  still in `components/content/` for a future single-banner mount on
+  `/practice`; nothing renders it right now.
+
+> **Mapping (set by E.0).** `Παλαιό Θέμα #1` → `'june-2025'`; #2 →
+> `'sept-2025'`; #3 → `'june-2024'`; #4 → `'sept-2024'`; #5 → `'june-2023'`;
+> #6 → `'sept-2023'`; #7 → `'june-2022'`; #8 → `'sept-2022'`; #9 →
+> `'june-2021'`; #10 → `'sept-2020'`; #11 → `'distance-2020'`; #12 →
+> `'feb-2019'`; #13 → `'june-2018'`; #14 → `'sept-2017'`; #15 →
+> `'feb-2017'`; #16 → `'june-2016'`; #17 → `'feb-2016'`; #18 →
+> `'june-2015'`; #19 → `'midterm-2012'`; #20 → `'sept-2011'`; #21 →
+> `'june-2011'`; #22 → `'june-2010'`; #23 → `'midterm-2008'`. (Cross-checked
+> against the checklist below + `ExamSource` enum in `content/practice/
+> types.ts`.) Frontistiria #1–#10 → `'frontistirio-2023-24'`; #11–#13 →
+> `'frontistirio-misc'`.
 
 ### Splitting & routing
 - One `Exercise` object **per sub-exercise** (Q1, Q2a, Q2b…), never per paper.
@@ -57,9 +84,11 @@ beginner-friendly Greek solution — then **anonymise** in the UI.
   the new sub-exercise objects.
 
 ### Source files
-- Raw source files live in `/private_material` (git-ignored). They do **not**
-  need to be deleted after transcription — the git-ignore already keeps them off
-  GitHub. Just leave them in place.
+- Raw source files live in `material/past_exams/` (the 4 publicly-available
+  2024/2025 papers — TRACKED) and `private_material/` (the older
+  Ζησιμόπουλος archive + frontistirio decks — TRACKED after 2026-05-24).
+  Every transcribed entry sets `sourceFile` to point at the relevant file
+  so the «Δες το πρωτότυπο» link in the bank works.
 
 ## Exercise object template
 
@@ -111,15 +140,15 @@ beginner-friendly Greek solution — then **anonymise** in the UI.
 | 5 | Παλαιό Θέμα #5 | `Ζησιμόπουλος/2023-June-VZ/Algo-June-2023.pdf` *(deleted)* | ☑ |
 | 6 | Παλαιό Θέμα #6 | `Ζησιμόπουλος/2023-Sept-VZ/*.jpg` (2) | ☑ 4/4 |
 | 7 | Παλαιό Θέμα #7 | `Ζησιμόπουλος/2022-June-VZ/Algo_june_2022.pdf` | ☑ 4/4 |
-| 8 | Παλαιό Θέμα #8 | `Ζησιμόπουλος/2022-Sept-VZ/*.jpg` (3) | ☑ 3/3 |
-| 9 | Παλαιό Θέμα #9 | `Ζησιμόπουλος/2021-June-VZ/` (Θ1.pdf, Θ2.pdf, 1–15.png) | ☑ 17/17 |
-| 10 | Παλαιό Θέμα #10 | `Αλγο-2020-Σεπτ-1(Slot2).jpg`, `Αλγο-2020-Σεπτ-2(Slot2).jpg` | ☑ 4/4 |
-| 11 | Παλαιό Θέμα #11 | `αλγοριθμοι-και-πολυπλοκοτιτα-εξ-αποστασεως-2020.pdf` | ☑ 4/4 |
+| 8 | Παλαιό Θέμα #8 | `Ζησιμόπουλος/2022-Sept-VZ/*.jpg` (3) | ☐ (3/3 σε PR #4 → [[phase-f0-absorb]]) |
+| 9 | Παλαιό Θέμα #9 | `Ζησιμόπουλος/2021-June-VZ/` (Θ1.pdf, Θ2.pdf, 1–15.png) | ☐ (17/17 σε PR #4 → Phase F.0) |
+| 10 | Παλαιό Θέμα #10 | `Αλγο-2020-Σεπτ-1(Slot2).jpg`, `Αλγο-2020-Σεπτ-2(Slot2).jpg` | ☐ (4/4 σε PR #4 → Phase F.0) |
+| 11 | Παλαιό Θέμα #11 | `αλγοριθμοι-και-πολυπλοκοτιτα-εξ-αποστασεως-2020.pdf` | ☑ 1/4 (Θ.1 absorbed· 3 σε PR #4 → Phase F.0) |
 | 12 | Παλαιό Θέμα #12 | `Ζησιμόπουλος/2019-Feb-VZ/2019.pdf` | ⊘ κενό |
-| 13 | Παλαιό Θέμα #13 | `Ζησιμόπουλος/2018-June-VZ/*.jpg` (2) | ☑ 14/15 |
-| 14 | Παλαιό Θέμα #14 | `Ζησιμόπουλος/2017-Sept-VZ/*.jpg` (2) | ☑ 13/16 |
-| 15 | Παλαιό Θέμα #15 | `Ζησιμόπουλος/2017-Feb-VZ/algo-fevr-2017-zisimopoulos.pdf` | ☑ 9/15 |
-| 16 | Παλαιό Θέμα #16 | `Ζησιμόπουλος/2016-June-VZ/*.jpg` (2) | ☑ 10/11 |
+| 13 | Παλαιό Θέμα #13 | `Ζησιμόπουλος/2018-June-VZ/*.jpg` (2) | ☐ (14/15 σε PR #4 → Phase F.0) |
+| 14 | Παλαιό Θέμα #14 | `Ζησιμόπουλος/2017-Sept-VZ/*.jpg` (2) | ☐ (13/16 σε PR #4 → Phase F.0) |
+| 15 | Παλαιό Θέμα #15 | `Ζησιμόπουλος/2017-Feb-VZ/algo-fevr-2017-zisimopoulos.pdf` | ☐ (9/15 σε PR #4 → Phase F.0) |
+| 16 | Παλαιό Θέμα #16 | `Ζησιμόπουλος/2016-June-VZ/*.jpg` (2) | ☑ 3/10 (Θ.3.2-3.3, Θ.4, Θ.5 absorbed· 7 σε PR #4 → Phase F.0) |
 | 17 | Παλαιό Θέμα #17 | `Ζησιμόπουλος/2016-Feb-VZ/*.jpg` (5) | ☐ |
 | 18 | Παλαιό Θέμα #18 | `Ζησιμόπουλος/2015-June-VZ/` (2 pdf, 2 jpg) | ☐ |
 | 19 | Παλαιό Θέμα #19 | `Ζησιμόπουλος/2012-Midterm/2012-p.pdf` | ☐ |
@@ -140,21 +169,38 @@ beginner-friendly Greek solution — then **anonymise** in the UI.
 | 6 | Φροντιστηριακό Σετ #6 | `F7__eclass.pdf` | ☑ 8/8 (Ασκ 1–8) |
 | 7 | Φροντιστηριακό Σετ #7 | `F8__eclass.pdf` | ☑ 12/12 (Ασκ 1–12) |
 | 8 | Φροντιστηριακό Σετ #8 | `F9__eclass.pdf` | ☑ 4/4 (Ασκ 1–4) |
-| 9 | Φροντιστηριακό Σετ #9 | `F10__eclass.pdf` | ☑ 5/5 (Ασκ 1,2,3,5,8) |
-| 10 | Φροντιστηριακό Σετ #10 | `F11__eclass.pdf` | ☑ 14/14 (Ασκ 1–14) |
-| 11 | Φροντιστηριακό Σετ #11 | `1ο Φροντ.pdf` | ☑ 3/3 |
+| 9 | Φροντιστηριακό Σετ #9 | `F10__eclass.pdf` | ☑ 4/5 (Ασκ 1,3,5,8 absorbed· Ασκ 2 σε PR #4 → Phase F.0) |
+| 10 | Φροντιστηριακό Σετ #10 | `F11__eclass.pdf` | ☑ 13/14 (Ασκ 6 σε PR #4 → Phase F.0) |
+| 11 | Φροντιστηριακό Σετ #11 | `1ο Φροντ.pdf` | ☑ 2/3 (Ασκ 1 σε PR #4 → Phase F.0) |
 | 12 | Φροντιστηριακό Σετ #12 | `2ο Φροντ.pdf` | ☑ 2/2 |
 | 13 | Φροντιστηριακό Σετ #13 | `3ο Φροντ.pdf` | ☑ 3/3 |
 
 ## Progress
 
-**Old exams — done: 15 / 23** (#1–#11, #13–#16· το #12 είναι κενό αρχείο).
-Fully pending: 7 (#17–#23).
-**Frontistiria — done: 13 / 13 — 100% ΟΛΟΚΛΗΡΩΘΗΚΕ.**
+**Old exams — fully done: 7 / 23** (#1–#7). Partial: #11 (1/4 absorbed), #16
+(3/10). Fully pending or partial: 16 (#8–#23 minus #12 κενό). PR #4 (Stelios)
+transcribed papers #8–#11, #13–#16 in full — those entries are queued for
+absorption in **Phase F.0**, see `plans/PHASE_F0_ABSORB.md`.
 
-Total modular exercises transcribed so far: **221** (202 από προηγούμενες
-συνεδρίες συν 19 αυτή τη συνεδρία: Παλαιό Θέμα #15 ×9, #16 ×10). Verified by
-`grep -cE "id: '(pt|front-set-)" content/practice/exercises.tsx` → 221.
+**Frontistiria — fully done: 10 / 13** (#1–#8 from prior sessions; #12 + #13
+from PR #4 in this merge). Partial: #9 (4/5), #10 (13/14), #11 (2/3) — one
+entry per set is queued for Phase F.0.
+
+Total modular exercises in the merged bank: **151** (123 από προηγούμενες
+συνεδρίες ως [[phase-d-problem-rework]] + 28 absorbed από το PR #4 του Stelios
+στη συγχώνευση 2026-05-25: 24 frontistirio + 4 παλαιά θέματα). Verified by
+`grep -cE "id: '(pt|front-set-)" content/practice/exercises.tsx` → 151.
+
+> **PR #4 absorption — Phase F.0 queue (2026-05-25).** When PR #4 from
+> Stelios was merged into our `algorithms-class-version` branch, **~70
+> additional transcribed entries** from his commits landed in conflict
+> regions and were not absorbed in the merge (the resolution preferred
+> our de-anonymized format to protect [[phase-e0-bank-dedeanonymization]]
+> + the Phase D quality pass). Those entries are recoverable from
+> `origin/main` at any time. See `plans/PHASE_F0_ABSORB.md` for the
+> per-entry list + the reformatting recipe. Stelios's transcriptions
+> are functional but predate the [[lecture-rework-standard]] bar —
+> they need a Phase D-equivalent quality pass once absorbed.
 
 > **Batch note (2026-05-22, privacy + batch session).** Two parts:
 > **(1) Privacy architecture.** All raw exercise material moved to the new

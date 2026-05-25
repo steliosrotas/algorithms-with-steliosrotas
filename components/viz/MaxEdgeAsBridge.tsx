@@ -15,6 +15,7 @@
  */
 
 import { useState } from 'react'
+import { routeEdge, trimEdgeGeom, type NodeRect } from './edge-routing'
 
 const NODES = [
   { id: 'u', x: 130, y: 100 },
@@ -34,20 +35,26 @@ const EDGES: Edge[] = [
 
 const R = 22
 
-function pos(id: string) {
-  return NODES.find((n) => n.id === id)!
-}
+const NODE_RECTS: NodeRect[] = NODES.map((n) => ({
+  id: n.id,
+  x: n.x - R,
+  y: n.y - R,
+  w: 2 * R,
+  h: 2 * R,
+}))
+const NODE_RECT_BY_ID = new Map(NODE_RECTS.map((r) => [r.id, r]))
 
-function trim(a: { x: number; y: number }, b: { x: number; y: number }, r: number) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return {
-    x1: a.x + (dx / len) * r,
-    y1: a.y + (dy / len) * r,
-    x2: b.x - (dx / len) * r,
-    y2: b.y - (dy / len) * r,
-  }
+function routedEdge(aId: string, bId: string) {
+  const aRect = NODE_RECT_BY_ID.get(aId)!
+  const bRect = NODE_RECT_BY_ID.get(bId)!
+  const ax = aRect.x + aRect.w / 2
+  const ay = aRect.y + aRect.h / 2
+  const bx = bRect.x + bRect.w / 2
+  const by = bRect.y + bRect.h / 2
+  const geom = trimEdgeGeom(routeEdge(aRect, bRect, NODE_RECTS), ax, ay, R, bx, by, R)
+  const mx = geom.kind === 'line' ? (ax + bx) / 2 : (ax + bx + 2 * geom.cx) / 4
+  const my = geom.kind === 'line' ? (ay + by) / 2 : (ay + by + 2 * geom.cy) / 4
+  return { ...geom, mx, my }
 }
 
 const MST_EDGES = new Set(['uv', 'vw', 'ux'])
@@ -88,11 +95,7 @@ export function MaxEdgeAsBridge() {
           xmlns="http://www.w3.org/2000/svg"
         >
           {EDGES.map((e) => {
-            const a = pos(e.a)
-            const b = pos(e.b)
-            const { x1, y1, x2, y2 } = trim(a, b, R)
-            const mx = (x1 + x2) / 2
-            const my = (y1 + y2) / 2
+            const g = routedEdge(e.a, e.b)
             const isMax = e.id === 'ux'
             const isMst = MST_EDGES.has(e.id)
             const inTreeHi = showMst && isMst
@@ -100,16 +103,20 @@ export function MaxEdgeAsBridge() {
             const sw = inTreeHi || isMax ? 3.4 : 2
             return (
               <g key={e.id}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke={stroke}
-                  strokeWidth={sw}
-                />
-                <rect x={mx - 13} y={my - 11} width={26} height={22} rx={4} fill="#faf4ee" stroke={stroke} />
-                <text x={mx} y={my} textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={700} fill="#1c1214">
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={sw}
+                  />
+                ) : (
+                  <path d={g.d} fill="none" stroke={stroke} strokeWidth={sw} />
+                )}
+                <rect x={g.mx - 13} y={g.my - 11} width={26} height={22} rx={4} fill="#faf4ee" stroke={stroke} />
+                <text x={g.mx} y={g.my} textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={700} fill="#1c1214">
                   {e.w}
                 </text>
               </g>

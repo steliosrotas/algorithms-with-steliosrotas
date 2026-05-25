@@ -32,6 +32,14 @@ export const metadata: Metadata = {
     locale: 'el_GR',
   },
   robots: { index: true, follow: true },
+  // Tell auto-dark browser extensions (Dark Reader and friends) to keep
+  // their hands off — the site has its own designed light/dark themes and
+  // a third-party inversion on top produces broken double-darkened pages.
+  // Reported on Discord 2026-05-24. Users who actively prefer Dark Reader
+  // can still opt back in per-site from the extension's own UI.
+  other: {
+    'darkreader-lock': '',
+  },
 }
 
 export const viewport: Viewport = {
@@ -39,7 +47,9 @@ export const viewport: Viewport = {
   initialScale: 1,
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#fcfafa' },
-    { media: '(prefers-color-scheme: dark)', color: '#160c0e' },
+    // Matches the dark theme's --bg (14 12 11 = stone-950 neutral). The
+    // previous value (#160c0e) was the older maroon-tinted bg.
+    { media: '(prefers-color-scheme: dark)', color: '#0e0c0b' },
   ],
 }
 

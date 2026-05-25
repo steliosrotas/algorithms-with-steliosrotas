@@ -9,6 +9,7 @@ import {
   Circle,
   Target,
   Radar,
+  Flame,
 } from 'lucide-react'
 import {
   TOPIC_COLORS,
@@ -17,6 +18,7 @@ import {
   SOURCE_LABELS,
   ORIGIN_LABELS,
   ORIGIN_COLORS,
+  RECENT_SOURCES,
 } from '@/content/practice/types'
 import { useFormulaSheet } from '@/components/practice/formula-sheet-store'
 import { SectionComments } from '@/components/layout/SectionComments'
@@ -96,6 +98,16 @@ export function SoseProblemCard({
             {exercise.source && (
               <span className="rounded-full border border-purple-500/40 bg-purple-500/10 px-2 py-0.5 text-[11px] font-semibold text-purple-700 dark:text-purple-300">
                 {SOURCE_LABELS[exercise.source]}
+              </span>
+            )}
+            {exercise.source && RECENT_SOURCES.has(exercise.source) && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-rose-500/40 bg-rose-500 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-white shadow-sm"
+                title="Πρόσφατο θέμα — υψηλή προτεραιότητα"
+              >
+                <Flame className="h-3 w-3" aria-hidden />
+                Θέμα Εξετάσεων{' '}
+                {exercise.source.endsWith('-2025') ? '2025' : '2024'}
               </span>
             )}
             {exercise.problemNumber && (

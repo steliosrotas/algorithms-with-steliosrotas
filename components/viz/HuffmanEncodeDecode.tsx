@@ -21,6 +21,7 @@
 import { useMemo, useState } from 'react'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routeEdge, type NodeRect } from './edge-routing'
 
 type TreeNode = {
   id: string
@@ -68,6 +69,38 @@ const LEAF_BY_CHAR: Record<string, string> = {
   A: 'A',
   K: 'K',
   Σ: 'sigma',
+}
+
+const LEAF_R = 22
+const INTERNAL_R = 19
+
+const NODE_RECTS: NodeRect[] = []
+const NODE_RECT_BY_ID = new Map<string, NodeRect>()
+for (const n of Object.values(NODES) as TreeNode[]) {
+  const r = n.char ? LEAF_R : INTERNAL_R
+  const rect: NodeRect = {
+    id: n.id,
+    x: n.x - r,
+    y: n.y - r,
+    w: 2 * r,
+    h: 2 * r,
+  }
+  NODE_RECTS.push(rect)
+  NODE_RECT_BY_ID.set(n.id, rect)
+}
+
+/** Routed parent→child edge, center-to-center (Huffman edges have no
+ *  arrowhead, so no asymmetric trim). Returns the midpoint anchor for the
+ *  bit label (line midpoint for a straight edge, Bezier midpoint for a curve). */
+function routedEdge(parent: TreeNode, child: TreeNode) {
+  const pR = NODE_RECT_BY_ID.get(parent.id)!
+  const cR = NODE_RECT_BY_ID.get(child.id)!
+  const g = routeEdge(pR, cR, NODE_RECTS)
+  const mx =
+    g.kind === 'line' ? (parent.x + child.x) / 2 : (parent.x + child.x + 2 * g.cx) / 4
+  const my =
+    g.kind === 'line' ? (parent.y + child.y) / 2 : (parent.y + child.y + 2 * g.cy) / 4
+  return { g, mx, my }
 }
 
 /** Path from root to a node (sequence of nodeIds including both endpoints). */
@@ -257,18 +290,23 @@ export function HuffmanEncodeDecode() {
               return parent.children.map((childId, ci) => {
                 const child = NODES[childId]
                 const isActive = activeEdges.has(`${parent.id}→${childId}`)
-                const mx = (parent.x + child.x) / 2
-                const my = (parent.y + child.y) / 2
+                const stroke = isActive ? '#d97706' : '#9b8a8d'
+                const strokeWidth = isActive ? 3.5 : 1.8
+                const { g, mx, my } = routedEdge(parent, child)
                 return (
                   <g key={`${parent.id}-${childId}`}>
-                    <line
-                      x1={parent.x}
-                      y1={parent.y}
-                      x2={child.x}
-                      y2={child.y}
-                      stroke={isActive ? '#d97706' : '#9b8a8d'}
-                      strokeWidth={isActive ? 3.5 : 1.8}
-                    />
+                    {g.kind === 'line' ? (
+                      <line
+                        x1={g.x1}
+                        y1={g.y1}
+                        x2={g.x2}
+                        y2={g.y2}
+                        stroke={stroke}
+                        strokeWidth={strokeWidth}
+                      />
+                    ) : (
+                      <path d={g.d} fill="none" stroke={stroke} strokeWidth={strokeWidth} />
+                    )}
                     <text
                       x={mx}
                       y={my}

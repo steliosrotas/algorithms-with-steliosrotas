@@ -25,7 +25,7 @@ import {
   MST_EDGE_BY_ID,
   edgeId,
   other,
-  trimmedEdge,
+  routeMstEdge,
   mstAdjacency,
 } from './mst-graph'
 
@@ -180,7 +180,7 @@ export function PrimAnimator() {
           {MST_EDGES.map((e) => {
             const A = MST_POS.get(e.a)!
             const B = MST_POS.get(e.b)!
-            const g = trimmedEdge(A, B)
+            const g = routeMstEdge(A, B)
             const isTree = treeEdges.has(e.id)
             const isAdded = e.id === cur.edgeAdded
             const isCross = crossing.has(e.id)
@@ -202,16 +202,27 @@ export function PrimAnimator() {
             }
             return (
               <g key={e.id}>
-                <line
-                  x1={g.x1}
-                  y1={g.y1}
-                  x2={g.x2}
-                  y2={g.y2}
-                  stroke={stroke}
-                  strokeWidth={width}
-                  strokeDasharray={dash}
-                  strokeLinecap="round"
-                />
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={width}
+                    strokeDasharray={dash}
+                    strokeLinecap="round"
+                  />
+                ) : (
+                  <path
+                    d={g.d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={width}
+                    strokeDasharray={dash}
+                    strokeLinecap="round"
+                  />
+                )}
                 <rect
                   x={g.mx - 11}
                   y={g.my - 10}

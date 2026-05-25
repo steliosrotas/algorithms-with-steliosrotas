@@ -1,16 +1,10 @@
 import { ShieldAlert } from 'lucide-react'
 
 /**
- * Copyright / takedown notice rendered under every transcribed past-exam or
- * frontistirio exercise.
- *
- * Past-exam and frontistirio problems are transcribed into the exercise bank
- * and then their original PDF/image is deleted from the repo, and the exam's
- * real date is anonymised to a "Παλαιό Θέμα #N" label. This standing notice
- * replaces the original file and gives instructors a way to ask for removal.
- *
- * Rendered automatically by `ExerciseCard` whenever an exercise carries a
- * `paperLabel`. See `plans/EXAM_TRANSCRIPTION.md`.
+ * Copyright / takedown notice for transcribed past-exam / frontistirio
+ * problems. Currently unrendered (the per-card mount was removed
+ * 2026-05-24, commit `c46a587`); kept for a possible future single-banner
+ * mount on `/practice`. See `plans/EXAM_TRANSCRIPTION.md`.
  */
 export function ExamTranscriptionNotice() {
   return (

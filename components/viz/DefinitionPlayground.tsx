@@ -152,8 +152,35 @@ export function DefinitionPlayground() {
     return PLOT.yBot - clamped * (PLOT.yBot - PLOT.yTop)
   }
 
-  const tLine = tPts.map((p) => `${xFor(p.n).toFixed(1)},${yFor(p.v).toFixed(1)}`).join(' ')
-  const cfLine = cfPts.map((p) => `${xFor(p.n).toFixed(1)},${yFor(p.v).toFixed(1)}`).join(' ')
+  // Build a polyline that stops at the first point that goes out of the
+  // chart's [yMin, yMax] window. Otherwise yFor() clamps every subsequent
+  // sample to the same yTop/yBot, drawing a misleading horizontal trail
+  // along the edge of the chart and hiding the fact that the curve is
+  // exploding upward (or downward). The returned `overflow` is where to
+  // drop a ↑ / ↓ arrow so the truncation reads as «continues off-screen».
+  const buildLine = (
+    pts: { n: number; v: number }[],
+  ): { points: string; overflow: { x: number; dir: 'up' | 'down' } | null } => {
+    const out: string[] = []
+    let overflow: { x: number; dir: 'up' | 'down' } | null = null
+    for (const p of pts) {
+      const x = xFor(p.n)
+      out.push(`${x.toFixed(1)},${yFor(p.v).toFixed(1)}`)
+      if (p.v > yMax) {
+        overflow = { x, dir: 'up' }
+        break
+      }
+      if (p.v < yMin) {
+        overflow = { x, dir: 'down' }
+        break
+      }
+    }
+    return { points: out.join(' '), overflow }
+  }
+  const tBuilt = buildLine(tPts)
+  const cfBuilt = buildLine(cfPts)
+  const tLine = tBuilt.points
+  const cfLine = cfBuilt.points
 
   const validBand =
     !failsForever && n0 <= def.nMax
@@ -294,7 +321,49 @@ export function DefinitionPlayground() {
           strokeWidth={2}
           strokeDasharray="5 4"
         />
+        {cfBuilt.overflow && (
+          <text
+            x={cfBuilt.overflow.x}
+            y={
+              cfBuilt.overflow.dir === 'up'
+                ? PLOT.yTop - 5
+                : PLOT.yBot + 14
+            }
+            textAnchor="middle"
+            fontSize={15}
+            fontWeight={700}
+            fill="rgb(234 88 12)"
+            aria-label={
+              cfBuilt.overflow.dir === 'up'
+                ? 'συνεχίζει εκτός ορίων προς τα πάνω'
+                : 'συνεχίζει εκτός ορίων προς τα κάτω'
+            }
+          >
+            {cfBuilt.overflow.dir === 'up' ? '↑' : '↓'}
+          </text>
+        )}
         <polyline points={tLine} fill="none" stroke="rgb(37 99 235)" strokeWidth={2.5} />
+        {tBuilt.overflow && (
+          <text
+            x={tBuilt.overflow.x}
+            y={
+              tBuilt.overflow.dir === 'up'
+                ? PLOT.yTop - 5
+                : PLOT.yBot + 14
+            }
+            textAnchor="middle"
+            fontSize={15}
+            fontWeight={700}
+            fill="rgb(37 99 235)"
+            aria-label={
+              tBuilt.overflow.dir === 'up'
+                ? 'συνεχίζει εκτός ορίων προς τα πάνω'
+                : 'συνεχίζει εκτός ορίων προς τα κάτω'
+            }
+          >
+            {tBuilt.overflow.dir === 'up' ? '↑' : '↓'}
+          </text>
+        )}
 
         {/* legend */}
         <g transform={`translate(${PLOT.x0 + 10}, 296)`}>

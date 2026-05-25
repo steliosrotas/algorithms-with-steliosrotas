@@ -24,7 +24,7 @@ import {
   MST_POS,
   MST_NODE_R,
   MST_VIEW,
-  trimmedEdge,
+  routeMstEdge,
   type MstEdge,
 } from './mst-graph'
 
@@ -186,7 +186,7 @@ export function ReverseDeleteAnimator() {
           {MST_EDGES.map((e) => {
             const A = MST_POS.get(e.a)!
             const B = MST_POS.get(e.b)!
-            const g = trimmedEdge(A, B)
+            const g = routeMstEdge(A, B)
             const isCur = e.id === cur.edge.id
             const wasKept = cur.treeSoFar.has(e.id)
             const wasDeleted = cur.removed.has(e.id)
@@ -222,16 +222,27 @@ export function ReverseDeleteAnimator() {
             }
             return (
               <g key={e.id} opacity={wasDeleted && !isCur ? 0.4 : 1}>
-                <line
-                  x1={g.x1}
-                  y1={g.y1}
-                  x2={g.x2}
-                  y2={g.y2}
-                  stroke={stroke}
-                  strokeWidth={width}
-                  strokeDasharray={dash}
-                  strokeLinecap="round"
-                />
+                {g.kind === 'line' ? (
+                  <line
+                    x1={g.x1}
+                    y1={g.y1}
+                    x2={g.x2}
+                    y2={g.y2}
+                    stroke={stroke}
+                    strokeWidth={width}
+                    strokeDasharray={dash}
+                    strokeLinecap="round"
+                  />
+                ) : (
+                  <path
+                    d={g.d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={width}
+                    strokeDasharray={dash}
+                    strokeLinecap="round"
+                  />
+                )}
                 <rect
                   x={g.mx - 11}
                   y={g.my - 10}
